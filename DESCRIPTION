@@ -1,11 +1,10 @@
-Package: enlightenbciscomp
+Package: geosciencebc2019008
 Type: Package
 Title: Enlighten Geoscience BC 2019-008 Induced Seismicity Statistical Study Code
 Version: 0.2.0
 Author: Scott McKean <smckean@geoengio.com>
 Maintainer: Scott McKean <smckean@geoengio.com>
-Description: Code for processing, exploring, and modelling the BCOGC database for induced seismicity.
-    Functionality for BCGOC and Geologic Frac Databases
+Description: Code for processing, exploring, and modelling the BCOGC database for induced seismicity. Functionality for BCGOC and Geologic Frac Databases
 License: GNU GPLv3
 Depends:
     corrplot,
@@ -15,6 +14,7 @@ Depends:
     FSelector,
     gridExtra,
     h2o,
+    iml,
     mlr,
     mlrMBO,
     lubridate,
