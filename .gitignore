@@ -39,4 +39,4 @@ vignettes/*.pdf
 .Renviron
 
 # Stupid windows
-desktop.ini
+*/*desktop.ini
