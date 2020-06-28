@@ -49,21 +49,22 @@ numeric_input_cols <- c(
   "mean_tvd", "n_stages", "calc_completed_length_m",
   "mean_proppant_per_stage_t", "sd_proppant_per_stage_t", 
   "max_proppant_per_stage_t", "calc_total_proppant_t", 
-  "total_gas_injected_m3", "mean_fluid_per_stage_m3", 
-  "sd_fluid_per_stage_m3", "max_fluid_per_stage_m3", "calc_total_fluid_m3",
+  "mean_fluid_per_stage_m3",   "sd_fluid_per_stage_m3", 
+  "max_fluid_per_stage_m3", "calc_total_fluid_m3",
   "avg_stage_length", "avg_stage_spacing", "max_rate_m3_min", 
   "mean_rate_m3_min", "max_stage_duration_min", "mean_stage_duration_min",
-  "max_breakdown_mpa", "sd_breakdown_mpa", "mean_breakdown_mpa", 
   "max_isip_mpa", "sd_isip_mpa", "mean_isip_mpa", "frac_duration_days", 
   "calc_proppant_intensity_kg_m", "calc_fluid_intensity_m3_m", 
-  "breakdown_isip_ratio", "min_midpoint_dist",  "horiz_wells_in_1km", 
+  "min_midpoint_dist",  "horiz_wells_in_1km", 
   "horiz_wells_in_5km", "horiz_wells_in_10km", "horiz_wells_in_25km")
 
 if (geologic_input_data == TRUE){
   numeric_input_cols = c(
     numeric_input_cols, 
     "max_treating_mpa", "sd_treating_mpa", "mean_treating_mpa",
-    "number_sand_off_screen_out_stages", "mean_intervals_per_stage"
+    "number_sand_off_screen_out_stages", "mean_intervals_per_stage",
+    "max_breakdown_mpa", "sd_breakdown_mpa", "mean_breakdown_mpa", 
+    "total_gas_injected_m3", "breakdown_isip_ratio"
     )
 }
 
@@ -93,7 +94,6 @@ ml_df <- saf_wells_sf %>%
   dplyr::mutate_if(is.logical, as.numeric) %>%
   dplyr::filter(
     max_stage_duration_min < 10000,
-    max_breakdown_mpa < 200,
     min_midpoint_dist < 25000,
     max_isip_mpa < 200,
     shmin_grasby > 0) %>%
@@ -101,20 +101,22 @@ ml_df <- saf_wells_sf %>%
     !is.na(mean_proppant_per_stage_t),
     !is.na(mean_fluid_per_stage_m3),
     !is.na(mean_isip_mpa),
-    !is.na(mean_breakdown_mpa),
     mean_tvd < 0,
     min_midpoint_dist >0) %>%
   dplyr::mutate(seismogenic = as.factor(seismogenic))
 
 if (geologic_input_data == TRUE){
   ml_df = ml_df %>%
-    dplyr::filter(max_treating_mpa < 200)
+    dplyr::filter(max_treating_mpa < 200) %>%
+    dplyr::filter(max_breakdown_mpa < 200) %>%
+    dplyr::filter(!is.na(mean_breakdown_mpa))
   
   ml_df = impute(ml_df, cols = list(
     sd_treating_mpa = imputeMean(),
     mean_treating_mpa = imputeMean(),
     sd_treating_mpa = imputeMean(),
-    mean_intervals_per_stage = imputeMean()
+    mean_intervals_per_stage = imputeMean(),
+    sd_breakdown_mpa = imputeMean()
   ))
   
   ml_df[!is.finite(ml_df$max_treating_mpa),'max_treating_mpa'] <- 0
@@ -128,7 +130,6 @@ ml_df = impute(ml_df, cols = list(
   avg_stage_spacing = imputeMean(),
   mean_rate_m3_min = imputeMean(),
   mean_stage_duration_min = imputeMean(),
-  sd_breakdown_mpa = imputeMean(),
   sd_isip_mpa = imputeMean()
   ))$data
 
@@ -139,6 +140,26 @@ ml_df <- createDummyFeatures(
 
 ml_df[!is.finite(ml_df$max_rate_m3_min),'max_rate_m3_min'] <- 0
 ml_df[!is.finite(ml_df$max_stage_duration_min),'max_stage_duration_min'] <- 0
+```
+
+## Exploratory Data Analysis
+
+We use a boxplot, correlation plot, and PCA analysis to explore our data prior
+to feature selection. These functions are located in plot_functions.R. 
+
+```{r, eval=FALSE}
+# scatter plot of variables with seismogenic target
+target_boxplot(ml_df, output_path = '../output/')
+
+# pairs plot of variables with max magnitude target
+
+
+# corrplot of numeric features
+ml_corrplot(ml_df, '../output/', numeric_input_cols, target)
+
+# pca plot
+pca_scree_plot(ml_df, '../output/')
+pca_unit_circle_plot(ml_df, '../output/')
 ```
 
 # Write csv and rds for future use
