@@ -5,7 +5,9 @@
 #' @export
 pca_unit_circle_plot <- function(ml_df, output_path){
   
-  num_ml_df <- ml_df %>% select_if(is.numeric)
+  num_ml_df <- ml_df %>% 
+    select_if(is.numeric) %>% 
+    filter_if(~is.numeric(.), all_vars(!is.infinite(.)))
   
   pca <- prcomp(scale(num_ml_df))
   
@@ -55,7 +57,9 @@ pca_unit_circle_plot <- function(ml_df, output_path){
 #' @export
 pca_scree_plot <- function(ml_df, output_path){
   
-  num_ml_df <- ml_df %>% select_if(is.numeric)
+  num_ml_df <- ml_df %>% 
+    select_if(is.numeric) %>%
+    filter_if(~is.numeric(.), all_vars(!is.infinite(.)))
   
   pca <- prcomp(scale(num_ml_df))
   
@@ -81,7 +85,6 @@ ml_corrplot <- function(ml_df, output_path = '../output/', features, target){
   filt_df <- ml_df %>%
     dplyr::mutate(!!target := as.numeric(get(target))) %>%
     dplyr::select(features, target) %>%
-    dplyr::rename('maximum_magnitude' = max_mag) %>%
     dplyr::select(-contains('sd_')) %>%
     dplyr::select(-contains('max_'))
   
@@ -103,11 +106,12 @@ target_boxplot <- function(ml_df, output_path = '../output/',
   ggplot(ml_df_melt, aes(x = seismogenic, y = value, group = seismogenic, color = seismogenic)) +
     geom_violin() +
     geom_boxplot(width = 0.1) +
-    geom_dotplot(binaxis='y', stackdir='center', dotsize=0.1) +
+    geom_jitter(shape=16, position=position_jitter(0.1), alpha = 0.25) +
     scale_color_manual(values = c('black','red'))+
     facet_wrap(. ~ variable, scales = "free_y", ncol = 6) +
-    scale_y_continous(break=NULL) +
-    theme(legend.position = "none") +
+    theme(legend.position = "none", panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(), axis.title.y=element_blank(),
+          axis.text.y=element_blank(), axis.ticks.y=element_blank()) +
     xlab("") +
     ylab("") + 
     ggsave(paste0(output_path,prefix,"boxplot.jpeg"), width = 24, height = 48, units = 'in') + 
