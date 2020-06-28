@@ -389,7 +389,7 @@ load_process_vertical_surveys <- function(file, well_surface_sf, horiz_dev_wa_nu
     sf::st_as_sf(., coords = c('easting', 'northing'), dim = 'XY', 
                  remove = FALSE, crs = 26910) %>%
     dplyr::select(unique_surv_id, wa_num, drilling_event, ground_elevtn, 
-                  mean_ss_tvd = tvd, mean_ss_easting = easting, mean_ss_northing = northing,
+                  mean_tvd = tvd, mean_easting = easting, mean_northing = northing,
                   survey_well_type) 
   
   vert_df$midpoint <- st_geometry(vert_df)

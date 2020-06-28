@@ -40,3 +40,6 @@ vignettes/*.pdf
 
 # Stupid windows
 */*desktop.ini
+
+# Original geology maps
+geology_maps/

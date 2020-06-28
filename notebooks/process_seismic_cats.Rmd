@@ -1,0 +1,138 @@
+---
+title: "Process Seismic Catalogs"
+author: "Scott McKean"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(geosciencebc2019008)
+```
+
+Load the montney extents to subset and filter the catalogue
+
+```{R}
+# Load montney extents
+gbc_blanking_region <- 
+  sf::st_read(dsn = '../input/shapefiles', layer = 'montney_extents') %>%
+  st_transform(crs = 26910)
+```
+
+# Load Files
+
+Within the Montney extents, we have 1,107 events in the inducedseismicity.ca catalogue,
+3,149 events from the NRCAN OF8337 report, and 10,693 events from the unpublished NRCAN report.
+This substantially increases our catlaogue breadth! 
+
+```{r}
+is_cat <- '../input/catalogs/AlbertaCompCat2019-05.txt' %>%
+  read.csv(., sep = '', header = TRUE) %>%
+  dplyr::mutate(date_time = ISOdatetime(yr, mo, dy, hh, mm, ss, tz = 'UTC')) %>%
+  dplyr::filter(Mpf >= -5,eventType != 2) %>%
+  dplyr::mutate(mw = Mpf) %>%
+  sf::st_as_sf(coords = c('lon', 'lat'), crs = 4326, remove = FALSE) %>%
+  sf::st_transform(crs = 26910) %>%
+  dplyr::mutate(depth = ifelse(Dep_err < 0, NA, Dep)) %>%
+  dplyr::select(depth, mw, date_time) %>%
+  cbind(., sf::st_coordinates(.)) %>%
+  dplyr::filter(st_contains_properly(gbc_blanking_region, .,sparse = FALSE))
+
+nrc2014_cat <- read_xlsx('../input/catalogs/nrcan_of8335_catalog.xlsx') %>%
+  as.data.frame() %>%
+  janitor::clean_names() %>%
+  dplyr::mutate(date_time = lubridate::ymd_hms(
+    str_c(str_remove(y_m_d, " UTC"), " ",
+          str_remove(h_m_s, "1899-12-31 ")))) %>%
+  sf::st_as_sf(coords = c('lon_e', 'lat_n'), crs = 4326, remove = FALSE) %>%
+  sf::st_transform(crs = 26910) %>%
+  dplyr::mutate(mw_cor = ifelse(is.na(mw), ml, mw)) %>%
+  dplyr::mutate(mw_coder = ifelse(is.na(mw), 'ml', 'mw')) %>%
+  dplyr::select(depth, mw = mw_cor, date_time) %>%
+  cbind(., sf::st_coordinates(.)) %>%
+  dplyr::filter(st_contains_properly(gbc_blanking_region, .,sparse = FALSE))
+
+nrc2017_cat <- read_xlsx('../input/catalogs/nrcan_ofxxxx_catalog.xlsx') %>%
+  as.data.frame() %>%
+  janitor::clean_names() %>%
+  sf::st_as_sf(coords = c('lon', 'lat'), crs = 4326, remove = FALSE) %>%
+  sf::st_transform(crs = 26910) %>%
+  dplyr::select(depth, mw = mag, date_time = datetime) %>%
+  cbind(., sf::st_coordinates(.)) %>%
+  dplyr::filter(st_contains_properly(gbc_blanking_region, .,sparse = FALSE))
+
+all_cats <- rbind(is_cat, nrc2014_cat, nrc2017_cat) %>%
+  dplyr::arrange(., date_time) %>%
+  dplyr::mutate(event_id = 1:nrow(.))
+```
+
+# Remove duplicate values and filter > magnitude of completeness
+
+In order to remove duplicate events from the catalogue, a one way search is conducted on
+a combined dataframe of all events, sorted by datetime. Any events occuring after the first
+event, within 10 seconds and within 10 km of the original event are flagged as a duplicate.
+A total of 2,298 unique events are flagged as duplicates and removed from the composite 
+catalogue. 
+
+We conduct a basic magnitude of completeness analysis using the maximum magnitude method
+with a rice binning. This provides a maximum magnitude of completeness of 0.25 for the
+catalogue, which might be aggressive but should provide the best results for our 
+machine learning workflow. The 'Sturges' binning provided a MaxM of 1, and the 'Freedman'
+method provides a max magnitude of 0.05. We consider the 'Rice' method to provide a reasonable
+balance between the two. We remove events below the catalogue magnitude of completeness (0.25).
+
+We also remove all events before the year 2000.
+
+This leaves us with a catalogue of 9,892 events. 
+
+```{r}
+flag_is_cat_duplicates <- function(i, all_cats){
+
+  filt_cat <- all_cats[seq(i,i+10),]
+  dist_bool <- st_distance(filt_cat[1,], filt_cat, sparse = FALSE) < set_units(10000, 'm')
+  
+  x <- which(dist_bool &
+          (filt_cat$date_time - filt_cat[1,]$date_time) > 0 &
+          (filt_cat$date_time - filt_cat[1,]$date_time) < 60)
+  
+  ifelse(is_empty(x), NA, filt_cat[x,]$event_id)
+}
+
+is_cat_duplicates <- purrr::map(.x = 1:nrow(all_cats), 
+    .f = flag_is_cat_duplicates,
+    all_cats = all_cats)
+
+# filter out duplicates (since we did a one way search)
+dup_vec <- simplify(is_cat_duplicates[!is.na(is_cat_duplicates)]) %>% unique()
+
+# final composite catalogue
+final_catalogue <- all_cats %>%
+  dplyr::filter(!event_id %in% dup_vec) %>%
+  dplyr::filter(date_time > ymd('2000-01-01'))
+
+# get catalogue ECDF
+ecdf <- process_cat(final_catalogue$mw, method = 'rice')
+
+final_catalogue <- final_catalogue %>%
+  dplyr::filter(mw >= 0.25)
+
+write.csv(final_catalogue %>% st_drop_geometry(), 
+          '../input/catalogs/20190430_combined_catalogue.csv')
+```
+
+Test to make sure catalog looks correct 
+
+```{r}
+final_catalogue <- read_csv('../input/catalogs/20190430_combined_catalogue.csv')
+filt_cat <- all_cats %>% dplyr::filter(event_id %in% final_catalogue$event_id)
+
+p1 = ggplot(filt_cat) +
+  geom_histogram(aes(x = mw), bins = 40) +
+  labs(x = 'Magnitude', y = 'Count') +
+  theme_minimal()
+
+p2 = ggplot() +
+  geom_sf(data = filt_cat) +
+  geom_sf(data = gbc_blanking_region, fill = NA) +
+  labs(x = 'Easting', y = 'Northing', title = 'Final Catalogue') +
+  coord_sf() +
+  theme_minimal()
+```

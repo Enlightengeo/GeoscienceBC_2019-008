@@ -19,10 +19,12 @@ Depends:
     mlrMBO,
     lubridate,
     raster,
+    readxl,
     rgenoud,
     RANN,
     sf,
-    tidyverse
+    tidyverse,
+    units
 Suggests:
     testthat
 Encoding: UTF-8

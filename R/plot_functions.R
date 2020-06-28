@@ -90,7 +90,13 @@ ml_corrplot <- function(ml_df, output_path = '../output/', features, target){
   dev.off()
 }
 
-target_boxplot <- function(ml_df, output_path = '../output/'){
+#' Make a boxplot of variables against the target
+#' @param ml_df clean, numeric only dataframe of ml predictors
+#' @param output_path output path for plot
+#' @return ggplot
+#' @export
+target_boxplot <- function(ml_df, output_path = '../output/',
+                           prefix =""){
   
   ml_df_melt <- melt(ml_df, 'seismogenic')
   
@@ -101,8 +107,8 @@ target_boxplot <- function(ml_df, output_path = '../output/'){
     theme(legend.position = "none") +
     xlab("") +
     ylab("") + 
-    ggsave(paste0(output_path,"boxplot.jpeg"), width = 24, height = 48, units = 'in') + 
-    ggsave(paste0(output_path,"boxplot.eps"), width = 24, height = 48)
+    ggsave(paste0(output_path,prefix,"boxplot.jpeg"), width = 24, height = 48, units = 'in') + 
+    ggsave(paste0(output_path,prefix,"boxplot.eps"), width = 24, height = 48)
 }
 
 #' Make a target scatter plot

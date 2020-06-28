@@ -66,18 +66,22 @@ mapped_horizontal_well_spacing <- function(i, horiz_montney_wells, nn_dist){
 #' @param horiz_dev_well_sf dataframe of montney wells
 #' @return a joined sf dataframe with distances added
 #' @export
-calculate_horizontal_well_spacing <- function(horiz_dev_well_sf){
-  nn_dist <- horiz_dev_well_sf$midpoint %>% 
+add_horizontal_well_spacing <- function(all_wells_sf){
+  horiz_wells <- all_wells_sf %>%
+    dplyr::filter(survey_well_type == 'horizontal')
+  
+  nn_dist <- horiz_wells$midpoint %>% 
     st_coordinates() %>%
     as.data.frame() %>%
+    drop_na() %>%
     nn2(., k = 25)
   
-  horizontal_well_spacing <- map_dfr(.x = 1:nrow(horiz_dev_well_sf),
+  horizontal_well_spacing <- map_dfr(.x = 1:nrow(horiz_wells),
                                      .f = mapped_horizontal_well_spacing,
-                                     horiz_montney_wells = horiz_dev_well_sf,
+                                     horiz_montney_wells = horiz_wells,
                                      nn_dist = nn_dist)
   
-  left_join(horiz_dev_well_sf, horizontal_well_spacing, 
+  left_join(all_wells_sf, horizontal_well_spacing, 
             by = c('unique_surv_id','wa_num'))
 }
 
@@ -90,8 +94,8 @@ calculate_horizontal_well_spacing <- function(horiz_dev_well_sf){
 #' @return a filtered and modified dataframe
 #' @export
 filter_extents_add_on_prod_comp <- function(sf_df, montney_extents, well_prod_df, well_comp_df) {
-  test <- sf_df %>%
-    dplyr::filter(st_contains(montney_extents, ., sparse = FALSE)) %>%
+  sf_df %>%
+    dplyr::filter(sf::st_contains(montney_extents, sf_df$midpoint, sparse = FALSE)) %>%
     dplyr::left_join(., well_prod_df, by = 'wa_num') %>%
     dplyr::filter(!is.na(on_prod_date)) %>%
     dplyr::left_join(., well_comp_df, by = 'wa_num') %>%
