@@ -1,5 +1,5 @@
 ---
-title: "Induced Seismcity Wrapper"
+title: "Clean Data"
 author: "Scott McKean"
 output:
   pdf_document: default
@@ -85,11 +85,11 @@ if (geologic_input_data == TRUE){
     )
 }
 
-target <- c("seismogenic")
+targets <- c("seismogenic", "max_mag")
 
 ml_df <- saf_wells_sf %>%
   st_drop_geometry() %>% 
-  dplyr::select(aux_cols, numeric_input_cols, fact_input_cols, geology_input_cols, target) %>%
+  dplyr::select(aux_cols, numeric_input_cols, fact_input_cols, geology_input_cols, targets) %>%
   dplyr::mutate_if(is.logical, as.numeric) %>%
   dplyr::filter(
     max_stage_duration_min < 10000,
@@ -139,20 +139,11 @@ ml_df <- createDummyFeatures(
 
 ml_df[!is.finite(ml_df$max_rate_m3_min),'max_rate_m3_min'] <- 0
 ml_df[!is.finite(ml_df$max_stage_duration_min),'max_stage_duration_min'] <- 0
-
-table(ml_df$seismogenic)/nrow(ml_df)
 ```
 
-## Exploratory Data Analysis
+# Write csv and rds for future use
 
 ```{r}
-# scatter plot of variables with target
-target_boxplot(ml_df, output_path = '../output/', prefix='classification_')
-
-# corrplot of numeric features
-ml_corrplot(ml_df, '../output/', numeric_input_cols, target)
-
-# pca plot
-pca_scree_plot(ml_df, '../output/')
-pca_unit_circle_plot(ml_df, '../output/')
+write_csv(ml_df, paste0("../output/",run_date,"_mldf.csv"))
+write_rds(ml_df, paste0("../output/",run_date,"_mldf.rds"))
 ```

@@ -101,9 +101,12 @@ target_boxplot <- function(ml_df, output_path = '../output/',
   ml_df_melt <- melt(ml_df, 'seismogenic')
   
   ggplot(ml_df_melt, aes(x = seismogenic, y = value, group = seismogenic, color = seismogenic)) +
-    geom_boxplot() +
+    geom_violin() +
+    geom_boxplot(width = 0.1) +
+    geom_dotplot(binaxis='y', stackdir='center', dotsize=0.1) +
     scale_color_manual(values = c('black','red'))+
     facet_wrap(. ~ variable, scales = "free_y", ncol = 6) +
+    scale_y_continous(break=NULL) +
     theme(legend.position = "none") +
     xlab("") +
     ylab("") + 
