@@ -43,3 +43,6 @@ vignettes/*.pdf
 
 # Original geology maps
 geology_maps/
+
+# geoLOGIC wcfd data
+wcfd_data/
