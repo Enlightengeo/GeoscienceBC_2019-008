@@ -1,0 +1,290 @@
+---
+title: "Induced Seismcity Data Preparation Wrapper"
+author: "Scott McKean"
+date: "12/20/2019"
+output: html_document
+---
+
+# Geoscience BC Study Code - Data Prep Wrapper
+
+This notebook describes the model workflow for the enlighten geoscience induced 
+seismicity project.
+
+## Setup
+
+This first chunk imports the required libraries and source files. For easier
+reuse, we package and document the functions in an R package called 
+`geosciencebc2019008`. This package has numerous dependendies, including 
+the `sf` geospatial package with the `sp`, GEOS, and GDAL backends, and 
+the `tidyverse` suite of packages. Some of these dependencies can be a bit tricky
+to install due to binary compilation requirements - sorry.
+
+```{r setup, include=FALSE}
+library(geosciencebc2019008)
+run_date = Sys.Date() %>% str_replace_all(., "-", "_")
+# set projected coordinate system
+proj_crs = 26910
+```
+
+## Load and process OGC data
+
+### Well Completions
+Load and process the OGC frac data - creating a unique survey id, cleaning up the fluid
+and viscosity columns, and summing the total proppant and fluid columns along with some
+information about each stage (duration, length, and midpoint in measured depth)
+`load_process_ogc_frac_data()`. At present, there are 67,823 frac stages in the data.
+
+We summarize the frac information by well. Since the IS prediction is based on a single well,
+we need total values to analyze the intensity and type of each hydraulic fracturing program.
+This creates a dataframe with 2,929 wells, with summary statistics that include: number of 
+completions, drilling events, and stages, the first and last completion date, the min and max 
+completion depth (in md), the fluid, energizer, and viscosity type, total fluid and proppant 
+volumes and intensities, and min/max/mean rates and stage durations. Note that the intensities
+are calculated based on completed length reported for each well, so max-min depth + an average stage
+length.
+
+### Production Data 
+Load and process the OGC production data. There are a lot of rows here (2.3M), many of 
+which are conventional wells, but this may be important later so we process everything,
+with very little data transformation, since the data already has a clean oil/gas/water
+production rate by month. 
+
+Summarize the production data, providing the on_prod date (very important for spacing
+and depletion calcs) and production to date (good for long term CGR ratios and productivity
+of each region)
+
+```{r}
+# 1 BCOGC Completion Info
+well_comp_df <- '../input/20191103_bcogc_all_fracs.csv' %>%
+  load_process_ogc_frac_data() %>%
+  summarize_bcogc_frac_data()
+
+#2 Well Production Data
+# This is loaded to github as a .zip file - unzip first
+unzip('../input/20191103_bcogc_production.zip',exdir = "../input")
+well_prod_df <- '../input/20191103_bcogc_production.csv' %>%
+  load_process_ogc_prod_data() %>%
+  summarize_prod_data()
+```
+
+## Read geology and geospatial layers
+
+### Geospatial Layers
+Load the study extents, including the entire Montney bounds, as well as the two study
+subareas: the North Peace Ground Motion Monitoring Area (NPGMMA) and the 
+Kiskatinaw Seismic Monitoring and Mitigation Area (KSMMA). All maps, shapefiles, and 
+rasters are projected to NAD83 / UTM zone 10N (ESPG #26910) prior to analysis to 
+provide a consistent cartesian representation of lines, points, boundaries, and 
+grid cells.
+
+```{r}
+#1 Geospatial layers
+montney_extents <- 
+  sf::read_sf(dsn = "../input/shapefiles", layer = "montney_extents") %>%
+  sf::st_transform(26910)
+
+ksmma_extents <- 
+  sf::read_sf(
+    dsn = "../input/shapefiles", 
+    layer = "Kiskatinaw Seismic Monitoring and Mitigation Area_plyln") %>%
+  sf::st_transform(26910)
+
+npgmma_extents <- 
+  sf::read_sf(
+    dsn = "../input/shapefiles", 
+    layer = "Updated North Peace Ground Motion Monitoring Area_plyln") %>%
+  sf::st_transform(26910)
+```
+
+### Survey Data
+Get surface data for every well in BC. This is required to process the deviation surveys,
+and provides a lot of information about the well owner and sub-location of each well. 
+Load and process survey data. Use the surface locations to process and calculate the
+TVD, easting, and northing for every well in BC. Quite a few rows on this one (1M).
+
+Get horizontal laterals and non-horizontal well linestrings. These are the most important 
+survey objects for plotting, spacing analysis, and buffering geology parameters for each
+well. Takes a little while to combine and create linestrings for everything. There are
+4,421 reported horizontal wells, but we only have completion information for 2,929 of them, 
+meaning the OGC database might have (or likely has) quite a bit of missing data. There are
+~700 deviated wells, and a lot (23K) of vertical wells. This function also calculated the 
+midpoint of the line for spacing calculations.
+
+We intersect the horizontal montney wells, deviated wells, and vertical wells with 
+the extents of the study. We also filter any wells that a) don't have a completion date, 
+or b) don't have a on production date - which could mean wells that were drilled but 
+uncompleted (DUCs).
+
+We combine the vertical, horizontal, and deviated wells with the production and completions
+information to provide a single georeferenced dataframe for analysis and machine learning.
+
+```{R}
+#3 Load Survey Data and Intersect with Montney extents
+well_surface_sf <- '../input/20191103_bcogc_wells.csv' %>%
+  load_process_ogc_surface_data()
+
+horiz_dev_well_sf <- '../input/20191103_bcogc_dir_survey.csv' %>%
+  load_process_ogc_survey_data(., well_surface_sf) %>%
+  get_horiz_dev_sf(.)
+
+vert_well_sf <- '../input/20191103_bcogc_drill_ev.csv' %>%
+  load_process_vertical_surveys(., well_surface_sf, horiz_dev_well_sf$wa_num)
+```
+
+### Spacing Calculation 
+We also compute the spacing between well midpoints as a feature 
+in the model. There are a lot of problems with using a minimum line distance for 
+horizontal wells, so this is considered a MVP for a spacing feature. 
+Optimized with RANN, a kd-tree algorithm (requires projected coordinates).
+
+```{R}
+all_wells_sf <- rbind(horiz_dev_well_sf, vert_well_sf) %>%
+  filter_extents_add_on_prod_comp(., montney_extents, well_prod_df, well_comp_df) %>%
+  add_horizontal_well_spacing(.)
+```
+
+# Load geology data and intersect with wells
+
+This chunk buffers the existing wells and intersects the with geology layers to get
+input parameters for the model. Unfortunately we are unable to provide the original
+geotiffs, so you will have to settle on an extraction at the well level for the data.
+
+### Buffer Wells
+We use the st_buffer function with a distance (in metres) around the wells. This function 
+works well for horizontal, vertical, and deviated wells - creating an ellipse around 
+the wells. Each ellipse or circle (one per well) is then intersected with rasters of 
+geological variables in order to extract a mean geological parameter for the statistical
+model.
+
+### Load, Mask, and Stack Geology Parameters
+This function takes a masking raster (extent_sf) and applies it to a folder of
+geotiff files. It loads each file, projects it to the extent raster, and then
+resamples the raster to a specified resolution (using the `res` variable). This 
+makes sure each raster/geotiff is normalized and and can be properly stacked.
+
+### Extract Well Values
+We extract the values from the well buffer using a weighted mean. A 'simple' extraction is
+used, meaning that for each buffer polygon, the polygon only takes the weights of the
+geology parameters which are directly intersected with the polygon. This returns a dataframe
+that is merged with the all_wells_sf dataframe to increase the number of features available
+for the statistical model. This function takes quite a while due to the weighted mean and
+large number of wells.
+
+```{r}
+# buffer wells
+well_buffers <- st_buffer(all_wells_sf, dist = 300)
+
+# load, mask, and stack geotiffs
+raster_stack <- '../geology_maps/' %>%
+  load_resample_geotiffs(., extent_sf = montney_extents)
+
+# extract well values and bind to final dataframe
+well_geology_df <- raster::extract(raster_stack, well_buffers,
+                na.rm = TRUE, weights=TRUE, fun = mean, method = 'simple')
+
+write.csv(well_geology_df, paste0('../output/',run_date,'_well_geology_df.csv'))
+```
+
+Instead of doing the above intersection with the original geology maps,
+we take the extracted per well value and cbind it with all_wells_sf. We know
+that makes this code brittle and less reusable and apologize. 
+
+```{R}
+well_geology_df <- read.csv(paste0('../output/',run_date,'_well_geology_df.csv'))
+geo_wells_sf <- bind_cols(all_wells_sf, well_geology_df)
+```
+
+## Seismogenic Association
+
+Load a preprocessed seismic catalog that includes BCOGC data, NRCAN data, and Induced 
+Seismicity.ca data. Apply the hdbscan algorithm to the scaled projected coordinates and 
+date_time to determine if the earthquakes in the catalogue are clustered or not. 
+Setting npts higher will reduce the amount of clustered points.
+
+The catalog processing script can be found in the notebooks under `process_seismic_cats.Rmd`,
+with original data included in the repository.
+
+```{R}
+#2 Seismic Catalogue
+seismic_catalog <- '../input/catalogs/20190430_combined_catalogue.csv' %>%
+  load_preprocessed_catalogue() %>%
+  hdbscan_seismic_catalog(., npts = 3)
+```
+
+Here, we compute seismogenic association factor. The clusters have been precomputed 
+above. We associate any well and earthquakes that are a) within a cluster, 
+b) within x days of injection starting c) prior to x days after injection stops, 
+d) within x m, and e) larger than a minimum magnitude. These parameters can all be changed
+and need to be part of a sensitivity study. The function also returns a list column with 
+the indices from the catalogue with the associated earthquakes for further investigation.
+We also compute the earthquake statistics (max magnitude, mean magnitude, number of quakes) 
+from both seimogenic and non-seismogenic wells (will give a zero).
+
+This chunk takes a while...
+
+```{r}
+saf_wells_sf <- run_spatiotemporal_filter(
+  well_sf = geo_wells_sf, seismic_catalog = seismic_catalog, 
+  dist = 5000, days_before = 1, days_after = 30, mw_min = 1.1)
+
+saf_wells_sf <- saf_wells_sf %>%
+  get_earthquake_stats(., is_catalog = seismic_catalog)
+```
+## Sensitivity analysis on seismogenic association
+
+In this chunk, which is commented out an unevaluated because on excessively 
+long run times, we loop through a grid search of distance and magnitude to
+evaluate how these hyperparameters affect the total number of seismogenic wells
+and the mean magnitude of the wells
+
+```{R, eval=False}
+seismic_catalog <- '../input/catalogs/20190430_combined_catalogue.csv' %>%
+    load_preprocessed_catalogue()
+
+dist <- c(1000,3000,5000,7000,9000)
+mag <- c(0.25,0.75,1.25,1.75,2.25)
+npts <- c(3,5,7,9,11)
+grid = expand.grid(dist, mag, npts) %>%
+  rename(distance="Var1",magnitude="Var2", minpts="Var3")
+
+seismogenic_wells = list()
+mean_non_zero_mag = list()
+for (row in 1:nrow(grid)){
+  
+  seismic_catalog <- seismic_catalog %>%
+    hdbscan_seismic_catalog(., npts = grid[row,'minpts'])
+  
+  saf_wells_sf <- run_spatiotemporal_filter(
+    well_sf = geo_wells_sf, seismic_catalog = seismic_catalog, 
+    dist = grid[row,'distance'], days_before = 1, days_after = 30, 
+      mw_min = grid[row,'magnitude'])
+  
+  saf_wells_sf <- saf_wells_sf %>%
+    get_earthquake_stats(., is_catalog = seismic_catalog)
+  
+  seis_sum = saf_wells_sf$seismogenic %>% sum()
+  seismogenic_wells = append(seismogenic_wells, seis_sum)
+  mean_mag = saf_wells_sf %>% dplyr::filter(max_mag>0) %>% pull(max_mag) %>% mean()
+  mean_non_zero_mag = append(mean_non_zero_mag, mean_mag)
+  
+  print(c(grid[row,'Distance'], grid[row,'Magnitude'], seis_sum, mean_mag))
+}
+
+out <- grid %>%
+  dplyr::mutate(seismogenic_events = unlist(seismogenic_wells)) %>%
+  dplyr::mutate(mean_seismogenic_mag = unlist(mean_non_zero_mag))
+
+write_csv(out,'../output/hdbscan_sensitivity_grid.csv')
+```
+
+Write out the file for use directly in the machine learning workflow
+to avoid doing this all again every time
+
+```{r}
+saf_wells_sf %>% 
+  dplyr::select(-earthquakes,-midpoint) %>% 
+  sf::st_drop_geometry() %>%
+  data.table::fwrite(., paste0('../output/',run_date,'_saf_well_data.csv'))
+
+write_rds(saf_wells_sf, paste0('../output/',run_date,'_saf_well_data.rds'))
+```

@@ -55,20 +55,14 @@ of each region)
 
 ```{r}
 # 1 Geologic Completion Info (we cannot provide this data)
-frac_df <- load_process_geologic_frac_data("../wcfd_data/20191208_geologic_all_bc_fracs.csv")
+frac_df <- load_process_geologic_frac_data("../wcfd_data/20191208_all_bc_fracs_wcfd.csv")
 
 well_comp_df <- suppressWarnings(summarize_geologic_frac_data(frac_df)) %>%
 add_extra_geologic_columns(., frac_df)
 
-# # 1 BCOGC Completion Info
-# well_comp_df <- '../input/20191103_bcogc_all_fracs.csv' %>%
-#   load_process_ogc_frac_data() %>%
-#   summarize_bcogc_frac_data()
-
 #2 Well Production Data
 # This is loaded to github as a .zip file - unzip first
 unzip('../input/20191103_bcogc_production.zip',exdir = "../input")
-
 well_prod_df <- '../input/20191103_bcogc_production.csv' %>%
   load_process_ogc_prod_data() %>%
   summarize_prod_data()
@@ -196,7 +190,7 @@ that is merged with the all_wells_sf dataframe to increase the number of feature
 for the statistical model. This function takes quite a while due to the weighted mean and
 large number of wells.
 
-```{r, eval = False}
+```{r}
 # buffer wells
 well_buffers <- st_buffer(all_wells_sf, dist = 300)
 
@@ -208,7 +202,7 @@ raster_stack <- '../geology_maps/' %>%
 well_geology_df <- raster::extract(raster_stack, well_buffers,
                 na.rm = TRUE, weights=TRUE, fun = mean, method = 'simple')
 
-write.csv(well_geology_df, '../input/20190430_well_geology_df.csv')
+write.csv(well_geology_df, paste0('../wcfd_data/',run_date,'_well_geology_df_wcfd.csv'))
 ```
 
 Instead of doing the above intersection with the original geology maps,
@@ -216,7 +210,7 @@ we take the extracted per well value and cbind it with all_wells_sf. We know
 that makes this code brittle and less reusable and apologize. 
 
 ```{R}
-well_geology_df <- read.csv('../input/20190430_well_geology_df.csv')
+well_geology_df <- read.csv(paste0('../wcfd_data/',run_date,'_well_geology_df_wcfd.csv'))
 geo_wells_sf <- bind_cols(all_wells_sf, well_geology_df)
 ```
 
@@ -241,45 +235,6 @@ saf_wells_sf <- run_spatiotemporal_filter(
 saf_wells_sf <- saf_wells_sf %>%
   get_earthquake_stats(., is_catalog = seismic_catalog)
 ```
-## Sensitivity analysis on seismogenic association
-
-In this chunk, which is commented out an unevaluated because on excessively 
-long run times, we loop through a grid search of distance and magnitude to
-evaluate how these hyperparameters affect the total number of seismogenic wells
-and the mean magnitude of the wells
-
-```{R, eval=False}
-dist <- c(1000,3000,4000,5000,6000,7000,9000)
-mag <- c(0.25,0.50,0.75,1.00,1.25,1.50,1.75,2.00)
-grid = expand.grid(dist, mag) %>%
-  rename(distance="Var1",magnitude="Var2")
-
-seismogenic_wells = list()
-mean_non_zero_mag = list()
-for (row in 1:nrow(grid)){
-  saf_wells_sf <- run_spatiotemporal_filter(
-    well_sf = geo_wells_sf, seismic_catalog = seismic_catalog, 
-    dist = grid[row,'distance'], days_before = 1, days_after = 30, 
-      mw_min = grid[row,'magnitude'])
-  
-  saf_wells_sf <- saf_wells_sf %>%
-    get_earthquake_stats(., is_catalog = seismic_catalog)
-  
-  seis_sum = saf_wells_sf$seismogenic %>% sum()
-  seismogenic_wells = append(seimogenic_wells, seis_sum)
-  mean_mag = saf_wells_sf %>% dplyr::filter(max_mag>0) %>% pull(max_mag) %>% mean()
-  mean_non_zero_mag = append(mean_non_zero_mag, mean_mag)
-  
-  print(c(grid[row,'Distance'], grid[row,'Magnitude'], seis_sum, mean_mag))
-}
-
-out <- grid %>%
-  dplyr::mutate(seismogenic_events = unlist(seismogenic_wells)) %>%
-  dplyr::mutate(mean_seismogenic_mag = unlist(mean_non_zero_mag))
-
-write_csv(out,'../output/hdbscan_sensitivity_grid.csv')
-```
-
 Write out the file for use directly in the machine learning workflow
 to avoid doing this all again every time
 
@@ -287,7 +242,7 @@ to avoid doing this all again every time
 saf_wells_sf %>% 
   dplyr::select(-earthquakes,-midpoint) %>% 
   sf::st_drop_geometry() %>%
-  data.table::fwrite(., paste0('../output/',run_date,'_saf_results.csv'))
+  data.table::fwrite(., paste0('../wcfd_data/',run_date,'_saf_well_data_wcfd.csv'))
 
-write_rds(saf_wells_sf, paste0('../output/',run_date,'_saf_well_data.rds'))
+write_rds(saf_wells_sf, paste0('../wcfd_data/',run_date,'_saf_well_data_wcfd.rds'))
 ```
