@@ -1,0 +1,191 @@
+---
+title: "Classification Wrapper: XGBoost Model"
+author: "Scott McKean"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+library(geosciencebc2019008)
+run_date = Sys.Date() %>% str_replace_all(., "-", "_")
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+# Load prepared + cleaned data
+
+Load cleaned data (ml_df) from rds object
+
+```{r}
+target = 'seismogenic'
+
+ml_df <- read_rds('../output/2020_06_28_mldf.rds') %>%
+  dplyr::select(-'max_mag') %>%
+  dplyr::select(-aux_cols)
+```
+
+## Final Model Tuning
+
+```{r}
+final_feats = c("n_stages", "well_completed_length_m", "min_midpoint_dist", "avg_stage_length",
+  "calc_fluid_intensity_m3_m", "max_rate_m3_min", "distance_listric_faults_berger_m",
+  "shmin_grasby","geothermal_gradient_degc_km")
+
+final_ml_df <- norm_ml_df %>% dplyr::select(final_feats, target)
+
+final_class_tsk = makeClassifTask(data = final_ml_df, target = target)
+```
+
+```{r}
+xgb_ps = makeParamSet(
+  makeNumericParam("eta", lower = 0.1, upper = 0.6),
+  makeNumericParam("gamma", lower = 0.1, upper = 10),
+  makeNumericParam("lambda", lower = -1, upper = 2, trafo = function(x) 10^x),
+  makeIntegerParam("nrounds", lower = 50, upper = 150),
+  makeIntegerParam("max_depth", lower = 1, upper = 6),
+  makeNumericParam("colsample_bytree", lower = 0.3, upper = 0.7),
+  makeNumericParam("alpha", lower = 0, upper =1),
+  makeIntegerParam("min_child_weight", lower = 1, upper = 7)
+)
+
+# tune model
+classif_tune_res = tuneParams(
+  learner = classif_lrn, task = final_class_tsk, resampling = cv5,
+  par.set = xgb_ps, control = makeTuneControlMBO(budget = 25L), 
+  measures = logloss
+  )
+
+#save tune results
+saveRDS(classif_tune_res, 'classif_tune_res.rds')
+```
+
+```{r}
+classif_tune_res = readRDS('classif_tune_res.rds')
+
+# set hyperparameters
+tuned_classif_lrn = setHyperPars(
+  learner = classif_lrn, par.vals = classif_tune_res$x
+  )
+
+# train model
+classif_mod <- train(tuned_classif_lrn, final_class_tsk)
+
+# predict
+classif_predict <- predict(classif_mod, task = final_class_tsk)
+
+# make IML predictor
+class_predictor = Predictor$new(
+  classif_mod, 
+  data = final_ml_df
+  )
+```
+
+## Residual / Confusion Matrix / Threshold
+
+```{r}
+# threshold vs performance
+pvs = generateThreshVsPerfData(classif_predict, measures = list(fpr, tpr, mmce))
+pvs_plot = plotThreshVsPerf(pvs)
+
+pvs_plot +
+  theme_minimal() +
+  ggsave('../output/classif_perf_plot.jpg', width = 10, height = 6)
+
+plotROCCurves(pvs)
+
+```
+
+## Feature Importance and Interaction
+
+```{r}
+# importance plot
+classif_importance = getFeatureImportance(classif_mod)
+feat_imp = plot_feat_imp(classif_importance)
+
+p1 = ggplot(feat_imp$data) +
+  geom_col(aes(x = key, y = value)) +
+  labs(x = 'Feature', y = 'Importance') +
+  coord_flip() +
+  theme_minimal()
+
+interact = Interaction$new(class_predictor)
+
+p2 = ggplot(as.data.frame(interact$results) %>% filter(.class == 'X1')) +
+  geom_col(aes(x = .feature, y = .interaction)) +
+  labs(x = '', y = 'Interaction') +
+  coord_flip() +
+  theme_minimal()
+
+library(gridExtra)
+
+ggsave(file = '../output/classif_imp_interact.jpg', 
+       arrangeGrob(grobs = list(p1,p2), nrow=1),
+       width = 12, height = 8)
+```
+
+## Confusion Matrix and Threshold
+
+```{r}
+calculateConfusionMatrix(classif_predict, relative = TRUE, sums = TRUE)
+
+plotLearnerPrediction(tuned_classif_lrn, task = classif_tsk, 
+                      features = c("distance_listric_faults_berger_m", 
+                                   "geothermal_gradient_degc_km")
+                      )
+
+```
+
+## Partial Dependence & ICE Plots
+
+```{r}
+# partial dependence plot
+make_pdp_plot <- function(i, predictor, feats){
+  pdp <- FeatureEffect$new(predictor, method = 'pdp+ice', 
+                           feature = feats[i], center.at = 0.5)
+  
+  plot(pdp) + theme_minimal() + theme(axis.title.y=element_blank())
+}
+
+plist <- map(.x = 1:length(final_feats), .f = make_pdp_plot,
+             predictor = class_predictor, feats = final_feats)
+
+ggsave(file = '../output/classif_pdp_plot.jpg', 
+       arrangeGrob(grobs = plist, ncol = 3, left = 'Seismogenic'),
+       width = 10, height = 6)
+
+```
+
+## LIME & SHAP
+
+```{r}
+good_wells = c(1823, 2042, 2049, 1930, 1931)
+ml_df[good_wells,] %>% pull('seismogenic')
+
+row = 1931
+
+lime.explain = LocalModel$new(class_predictor, 
+                              x.interest = final_ml_df[row,],
+                              k = length(final_feats))
+
+p1 = ggplot(lime.explain$results %>% filter(.class == 'X1')) +
+  geom_col(aes(x = feature, y = effect)) +
+  labs(x = 'Feature', y = 'LIME Effect') +
+  coord_flip() +
+  theme_minimal()
+
+shapley = Shapley$new(class_predictor,
+                      x.interest = final_ml_df[row,] %>% 
+                        dplyr::select(final_feats),
+                      sample.size = 100)
+
+p2 = ggplot(shapley$results %>% filter(class == 'X1')) +
+  geom_col(aes(x = feature, y = phi)) +
+  labs(x = 'Feature', y = 'SHAP Phi') +
+  coord_flip() +
+  theme_minimal()
+
+ggsave(file = paste0('../output/classif_',row,'_lime_shap.jpg'),
+       arrangeGrob(grobs = list(p1,p2), nrow=1),
+       width = 12, height = 8)
+
+```

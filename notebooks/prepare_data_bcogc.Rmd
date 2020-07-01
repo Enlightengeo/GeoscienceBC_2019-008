@@ -182,7 +182,7 @@ raster_stack <- '../geology_maps/' %>%
 well_geology_df <- raster::extract(raster_stack, well_buffers,
                 na.rm = TRUE, weights=TRUE, fun = mean, method = 'simple')
 
-write.csv(well_geology_df, paste0('../output/',run_date,'_well_geology_df.csv'))
+write.csv(well_geology_df, paste0('../output/','bcogc_well_geology_df.csv'))
 ```
 
 Instead of doing the above intersection with the original geology maps,
@@ -190,7 +190,7 @@ we take the extracted per well value and cbind it with all_wells_sf. We know
 that makes this code brittle and less reusable and apologize. 
 
 ```{R}
-well_geology_df <- read.csv(paste0('../output/',run_date,'_well_geology_df.csv'))
+well_geology_df <- read.csv(paste0('../output/','bcogc_well_geology_df.csv'))
 geo_wells_sf <- bind_cols(all_wells_sf, well_geology_df)
 ```
 
@@ -204,13 +204,6 @@ Setting npts higher will reduce the amount of clustered points.
 The catalog processing script can be found in the notebooks under `process_seismic_cats.Rmd`,
 with original data included in the repository.
 
-```{R}
-#2 Seismic Catalogue
-seismic_catalog <- '../input/catalogs/20190430_combined_catalogue.csv' %>%
-  load_preprocessed_catalogue() %>%
-  hdbscan_seismic_catalog(., npts = 3)
-```
-
 Here, we compute seismogenic association factor. The clusters have been precomputed 
 above. We associate any well and earthquakes that are a) within a cluster, 
 b) within x days of injection starting c) prior to x days after injection stops, 
@@ -223,6 +216,11 @@ from both seimogenic and non-seismogenic wells (will give a zero).
 This chunk takes a while...
 
 ```{r}
+#2 Seismic Catalogue
+seismic_catalog <- '../input/catalogs/20190430_combined_catalogue.csv' %>%
+  load_preprocessed_catalogue() %>%
+  hdbscan_seismic_catalog(., npts = 3)
+
 saf_wells_sf <- run_spatiotemporal_filter(
   well_sf = geo_wells_sf, seismic_catalog = seismic_catalog, 
   dist = 5000, days_before = 1, days_after = 30, mw_min = 1.1)
@@ -284,7 +282,7 @@ to avoid doing this all again every time
 saf_wells_sf %>% 
   dplyr::select(-earthquakes,-midpoint) %>% 
   sf::st_drop_geometry() %>%
-  data.table::fwrite(., paste0('../output/',run_date,'_saf_well_data.csv'))
+  data.table::fwrite(., paste0('../output/','bcogc_saf_well_data.csv'))
 
-write_rds(saf_wells_sf, paste0('../output/',run_date,'_saf_well_data.rds'))
+write_rds(saf_wells_sf, paste0('../output/','bcogc_saf_well_data.rds'))
 ```
