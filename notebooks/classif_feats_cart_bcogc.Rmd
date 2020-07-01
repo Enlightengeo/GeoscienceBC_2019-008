@@ -11,7 +11,7 @@ library(geosciencebc2019008)
 run_date = Sys.Date() %>% str_replace_all(., "-", "_")
 knitr::opts_chunk$set(eval = FALSE)
 
-model_prefix = 'glm'
+model_prefix = 'cart_bcogc'
 ```
 
 # Load prepared + cleaned data
