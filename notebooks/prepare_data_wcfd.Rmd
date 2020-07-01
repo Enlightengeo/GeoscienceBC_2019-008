@@ -66,6 +66,9 @@ add_extra_geologic_columns(., frac_df)
 #   summarize_bcogc_frac_data()
 
 #2 Well Production Data
+# This is loaded to github as a .zip file - unzip first
+unzip('../input/20191103_bcogc_production.zip',exdir = "../input")
+
 well_prod_df <- '../input/20191103_bcogc_production.csv' %>%
   load_process_ogc_prod_data() %>%
   summarize_prod_data()

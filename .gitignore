@@ -41,6 +41,9 @@ vignettes/*.pdf
 # Stupid windows
 */*desktop.ini
 
+# Production data (non-zipped)
+/input/20191103_bcogc_production.csv
+
 # Original geology maps
 geology_maps/
 
