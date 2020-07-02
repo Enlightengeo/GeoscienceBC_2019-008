@@ -19,7 +19,7 @@ knitr::opts_chunk$set(eval = FALSE)
 This chunk loads our prepared data (see `prepare_data.Rmd`)
 
 ```{R}
-saf_wells_sf <- read_rds('../output/2020_06_27_bcogc_saf_well_data.rds')
+saf_wells_sf <- read_rds('../output/bcogc_saf_well_data.rds')
 geologic_input_data = FALSE
 ```
 
@@ -165,6 +165,6 @@ pca_unit_circle_plot(ml_df, '../output/')
 # Write csv and rds for future use
 
 ```{r}
-write_csv(ml_df, paste0("../output/",run_date,"_mldf.csv"))
-write_rds(ml_df, paste0("../output/",run_date,"_mldf.rds"))
+write_csv(ml_df, paste0("../output/","bcgoc_mldf.csv"))
+write_rds(ml_df, paste0("../output/","bcogc_mldf.rds"))
 ```

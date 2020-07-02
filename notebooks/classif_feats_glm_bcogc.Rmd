@@ -1,5 +1,5 @@
 ---
-title: "Classification Feature Selection Wrapper: CART model w/ BCGOC data"
+title: "Classification Feature Selection Wrapper: CV glmnet model w/ BCGOC data"
 author: "Scott McKean"
 output:
   pdf_document: default
@@ -11,7 +11,7 @@ library(geosciencebc2019008)
 run_date = Sys.Date() %>% str_replace_all(., "-", "_")
 knitr::opts_chunk$set(eval = FALSE)
 
-model_prefix = 'cart_bcogc'
+model_prefix = 'glm_bcogc'
 ```
 
 # Load prepared + cleaned data
@@ -50,7 +50,7 @@ classif_tsk = makeClassifTask(data = norm_ml_df, target = target) %>%
   undersample(., rate = 0.25)
 
 # learner
-classif_lrn = makeLearner("classif.rpart", predict.type = "prob")
+classif_lrn = makeLearner("classif.logreg", predict.type = "prob")
 ```
 
 ## Filter Based Feature Selection
@@ -90,7 +90,7 @@ in order to calculate the most important features and produces a plot.
 
 ```{r}
 classif_feats_seq_files = list.files(
-  paste0('../output/classif_feats_',model_prefix), pattern = "seq", full.names = TRUE
+  paste0('../output/classif_feats_seq_',model_prefix,'/'), full.names = TRUE
   )
 
 for (file in classif_feats_seq_files){
@@ -122,7 +122,7 @@ for (i in 1:100){
   
   print(i)
   saveRDS(classif_feats_rand,
-          paste0('../output/classif_feats_',model_prefix,'/rand_',i,'.rds')
+          paste0('../output/classif_feats_rand_',model_prefix,'/',i,'.rds')
           )
 }
 ```
@@ -133,7 +133,7 @@ This chunk parses the random sampling results.
 
 ```{r}
 classif_feats_rand_files = list.files(
-  paste0('../output/classif_feats_',model_prefix), pattern = "rand", full.names = TRUE
+  paste0('../output/classif_feats_rand_',model_prefix,'/'), full.names = TRUE
   )
 
 for (file in classif_feats_rand_files){
