@@ -11,7 +11,7 @@ library(geosciencebc2019008)
 run_date = Sys.Date() %>% str_replace_all(., "-", "_")
 knitr::opts_chunk$set(eval = FALSE)
 
-model_prefix = 'xgboost_bcogc'
+model_prefix = 'xgboost_wcfd'
 ```
 
 # Load prepared + cleaned data
@@ -25,13 +25,14 @@ aux_cols <- c(
   "unique_surv_id", "wa_num", "drilling_event", "ground_elevtn",
   "mean_easting", "mean_northing", "on_prod_date", "last_reported_date",
   "cum_gas_to_date_e3m3", "cum_oil_to_date_m3", "cum_water_to_date_m3",
-  "cum_cond_to_date_m3", "frac_start_date", "frac_end_date", "min_dist_well")
+  "cum_cond_to_date_m3", "frac_start_date", "frac_end_date", "min_dist_well",
+  "calc_completed_length_m")
 ```
 
 ## Subset data
 
 ```{r}
-ml_df <- read_rds('../output/2020_06_28_mldf.rds') %>%
+ml_df <- read_rds('../wcfd_data/wcfd_mldf.rds') %>%
   dplyr::select(-'max_mag', -aux_cols)
 ```
 
@@ -65,7 +66,7 @@ alpha value. Five-fold cross-validation, log loss, and default hyperparameters
 are used. We iterate through various alpha values to make the algorithm
 more robust to non-convergence.
 
-```{r, eval = FALSE}
+```{r}
 ## wrapper-based feature importance - sequential floating backwards sampling
 for (alpha in seq(3E-3, 8E-3, length.out = 50)){
   i = which(alpha == seq(3E-3, 8E-3, length.out = 50))
@@ -78,7 +79,7 @@ for (alpha in seq(3E-3, 8E-3, length.out = 50)){
 
   print(i)
   saveRDS(classif_feats_seq,
-          paste0('../output/classif_feats_seq_',model_prefix,'/',i,'.rds')
+          paste0('../output/classif_feats_',model_prefix,'/seq_',i,'.rds')
           )
 }
 ```
@@ -88,9 +89,14 @@ for (alpha in seq(3E-3, 8E-3, length.out = 50)){
 This chunk parses the wrapper-based sequential feature selection results
 in order to calculate the most important features and produces a plot.
 
-```{r, eval=False}
+## Wrapper-based feature importance - SFBS parsing
+
+This chunk parses the wrapper-based sequential feature selection results
+in order to calculate the most important features and produces a plot.
+
+```{r}
 classif_feats_seq_files = list.files(
-  paste0('../output/classif_feats_seq_',model_prefix,'/'), full.names = TRUE
+  paste0('../output/classif_feats_',model_prefix), pattern = "seq", full.names = TRUE
   )
 
 for (file in classif_feats_seq_files){
@@ -111,7 +117,50 @@ plot_classif_feat_seq(path, paste0('../output/',model_prefix), n_best_val = 1000
 We also use random sampling for feature selection. This is more robust to 
 non-convergence, but requires a lot of trials (we use 100,000).
 
-```{r, eval = False}
+```{r}
+## wrapper-based feature importance - random sampling
+for (i in 1:100){
+  classif_feats_rand = selectFeatures(
+    learner = classif_lrn, task = classif_tsk, resampling = cv5,
+    control = makeFeatSelControlRandom(maxit = 1000), 
+    measures = list(logloss), show.info = FALSE
+    )
+  
+  print(i)
+  saveRDS(classif_feats_rand,
+          paste0('../output/classif_feats_',model_prefix,'/rand_',i,'.rds')
+          )
+}
+```
+
+## Wrapper-based feature importance - random loop
+
+This chunk parses the random sampling results.
+
+```{r}
+classif_feats_rand_files = list.files(
+  paste0('../output/classif_feats_',model_prefix), pattern = "rand", full.names = TRUE
+  )
+
+for (file in classif_feats_rand_files){
+  feat_res = read_rds(file)
+  
+  if (file == classif_feats_rand_files[1]){
+    path = feat_res$opt.path$env$path
+  } else {
+    path = rbind(path, feat_res$opt.path$env$path)
+  }
+}
+
+plot_classif_feat_rand(path, paste0('../output/',model_prefix), n_best_val = 1000)
+```
+
+## Wrapper-based feature importance - random loop
+
+We also use random sampling for feature selection. This is more robust to 
+non-convergence, but requires a lot of trials (we use 100,000).
+
+```{r}
 ## wrapper-based feature importance - random sampling
 for (i in 1:100){
   classif_feats_rand = selectFeatures(
@@ -131,7 +180,7 @@ for (i in 1:100){
 
 This chunk parses the random sampling results.
 
-```{r, eval = False}
+```{r}
 classif_feats_rand_files = list.files(
   paste0('../output/classif_feats_rand_',model_prefix,'/'), full.names = TRUE
   )
