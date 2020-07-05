@@ -1,5 +1,5 @@
 ---
-title: "Classification Feature Selection Wrapper: CV glmnet model w/ BCGOC data"
+title: "Classification Feature Selection Wrapper: GLM w/ BCGOC data"
 author: "Scott McKean"
 output:
   pdf_document: default
@@ -85,12 +85,12 @@ for (alpha in seq(3E-3, 8E-3, length.out = 50)){
 
 ## Wrapper-based feature importance - SFBS parsing
 
-This chunk parses the wrapper-based sequential feature selection results
-in order to calculate the most important features and produces a plot.
+This chunk parses the wrapper-based sequential feature selection results in order to calculate the most important features and produces a plot.
 
 ```{r}
 classif_feats_seq_files = list.files(
-  paste0('../output/classif_feats_',model_prefix), pattern = "seq", full.names = TRUE
+  paste0('../output/classif_feats_',model_prefix), 
+  pattern = "seq", full.names = TRUE
   )
 
 for (file in classif_feats_seq_files){
@@ -108,8 +108,7 @@ plot_classif_feat_seq(path, paste0('../output/',model_prefix), n_best_val = 1000
 
 ## Wrapper-based feature importance - random loop
 
-We also use random sampling for feature selection. This is more robust to 
-non-convergence, but requires a lot of trials (we use 100,000).
+We also use random sampling for feature selection. This is more robust to non-convergence, but requires a lot of trials (we use 100,000).
 
 ```{r}
 ## wrapper-based feature importance - random sampling
@@ -121,9 +120,10 @@ for (i in 1:100){
     ))
   
   print(i)
-  saveRDS(classif_feats_rand,
-          paste0('../output/classif_feats_',model_prefix,'/rand_',i,'.rds')
-          )
+  saveRDS(
+    classif_feats_rand,
+    paste0('../output/classif_feats_',model_prefix,'/rand_',i,'.rds')
+    )
 }
 ```
 
