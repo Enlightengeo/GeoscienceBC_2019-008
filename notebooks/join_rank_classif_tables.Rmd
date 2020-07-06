@@ -9,6 +9,8 @@ Join tables, rank each column, and get mean ranks for three categories
 
 ```{r setup, include=FALSE}
 library(tidyverse)
+
+desc_dense_rank <- function(x){dense_rank((desc(x)))}
 ```
 
 Filter Based Feature Selection
