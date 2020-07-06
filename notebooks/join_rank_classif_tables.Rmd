@@ -1,0 +1,155 @@
+---
+title: "summary_table_ranking"
+author: "Scott McKean"
+date: "7/5/2020"
+output: html_document
+---
+
+Join tables, rank each column, and get mean ranks for three categories
+
+```{r setup, include=FALSE}
+library(tidyverse)
+```
+
+Filter Based Feature Selection
+
+```{r}
+files = list.files(
+  path = "../output/classif_feat_summary/", 
+  pattern=paste0('filter_feats.csv'),
+  full.names = TRUE)
+
+for (f in files){
+  header = f %>%
+    str_replace(.,"../output/classif_feat_summary/classif_","") %>%
+    str_replace(.,"_filter_feats.csv","")
+    
+  if (f == files[1]){
+    filter_feats = read_csv(f) %>% dplyr::select(-type)
+    colnames(filter_feats) <- c(
+      'feat',paste0(header,'_info_gain'),paste0(header,'_sym_uncert')
+      )
+  } else {
+    tmp = read_csv(f) %>% dplyr::select(-type)
+    colnames(tmp) <- c(
+      'feat',paste0(header,'_info_gain'),paste0(header,'_sym_uncert')
+      )
+    filter_feats <- filter_feats %>%
+      left_join(tmp, by = 'feat')
+    
+  }
+}
+
+filter_feats %>%
+  select(-feat) %>%
+  mutate(filter_mean_value = rowMeans(., na.rm=TRUE)) %>%
+  mutate(feat = filter_feats$feat) %>%
+  select('feat',everything()) %>%
+  write_csv('../output/classif_filter_values.csv')
+
+rank <- filter_feats %>% 
+  remove_rownames %>% 
+  column_to_rownames(var="feat") %>%
+  mutate_all(dense_rank) %>%
+  mutate(filter_mean_rank = rowMeans(., na.rm=TRUE)) %>%
+  mutate(feat = filter_feats$feat) %>%
+  select('feat',everything()) %>% 
+  write_csv('../output/classif_filter_rank.csv')
+```
+
+Sequential Wrapper Based Feature Selection
+
+```{r}
+files = list.files(
+  path = "../output/classif_feat_summary/", 
+  pattern='seq_feats.csv',
+  full.names = TRUE)
+
+for (f in files){
+  header = f %>%
+    str_replace(.,"../output/classif_feat_summary/classif_","") %>%
+    str_replace(.,"_seq_feats.csv","")
+    
+  if (f == files[1]){
+    seq_feats = read_csv(f)
+  } else {
+    seq_feats <- seq_feats %>% left_join(read_csv(f), by = 'var')
+  }
+}
+
+seq_feats %>%
+  select(-var) %>%
+  mutate(seq_mean_value = rowMeans(., na.rm=TRUE)) %>%
+  mutate(feat = seq_feats$var) %>%
+  select('feat',everything()) %>%
+  write_csv('../output/classif_seq_values.csv')
+
+seq_feats %>% 
+  remove_rownames %>% 
+  column_to_rownames(var="var") %>%
+  mutate_all(dense_rank) %>%
+  mutate(seq_mean_rank = rowMeans(., na.rm=TRUE)) %>%
+  mutate(feat = seq_feats$var) %>%
+  select('feat',everything()) %>% 
+  write_csv('../output/classif_seq_rank.csv')
+```
+
+Random Wrapper Based Feature Selection
+
+```{r}
+files = list.files(
+  path = "../output/classif_feat_summary/", 
+  pattern='rand_feats.csv',
+  full.names = TRUE)
+
+for (f in files){
+  header = f %>%
+    str_replace(.,"../output/classif_feat_summary/classif_","") %>%
+    str_replace(.,"_rand_feats.csv","")
+    
+  if (f == files[1]){
+    rand_feats = read_csv(f)
+  } else {
+    rand_feats <- rand_feats %>% left_join(read_csv(f), by = 'var')
+  }
+}
+
+rand_feats %>%
+  select(-var) %>%
+  mutate(rand_mean_value = rowMeans(., na.rm=TRUE)) %>%
+  mutate(feat = rand_feats$var) %>%
+  select('feat',everything()) %>%
+  write_csv('../output/classif_rand_values.csv')
+
+rand_feats %>% 
+  remove_rownames %>% 
+  column_to_rownames(var="var") %>%
+  mutate_all(dense_rank) %>%
+  mutate(rand_mean_rank = rowMeans(., na.rm=TRUE)) %>%
+  mutate(feat = rand_feats$var) %>%
+  select('feat',everything()) %>% 
+  write_csv('../output/classif_rand_rank.csv')
+```
+
+Join all tables and final mean rank
+
+```{r}
+filter <- read_csv('../output/classif_filter_rank.csv') %>%
+  select(feat, filter_mean_rank)
+
+seq <- read_csv('../output/classif_seq_rank.csv') %>%
+  select(feat, seq_mean_rank)
+
+rand <- read_csv('../output/classif_rand_rank.csv') %>%
+  select(feat, rand_mean_rank)
+
+final <- filter %>%
+  left_join(seq, by='feat') %>%
+  left_join(rand, by ='feat') %>%
+  select(-feat) %>%
+  mutate(final_rank = rowMeans(.)) %>%
+  mutate(feat=filter$feat) %>%
+  arrange(desc(final_rank)) %>%
+  select(feat, everything()) %>%
+  write_csv('../output/classif_final_rank.csv')
+```
