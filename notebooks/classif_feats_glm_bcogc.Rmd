@@ -56,6 +56,14 @@ classif_lrn = makeLearner("classif.logreg", predict.type = "prob")
 ## Filter Based Feature Selection
 ```{r}
 plot_classif_filt_importance(classif_tsk, paste0('../output/',model_prefix,"_"))
+
+library(tidyverse)
+
+classif_fv = generateFilterValuesData(classif_tsk, 
+    method = c("FSelector_information.gain",
+               "FSelector_symmetrical.uncertainty"))
+
+classif_fv$data %>% write_csv(.,paste0( '../output/classif_',model_prefix,"_",'filter_feats.csv'))
 ```
 ## Wrapper-based feature importance - SFBS loop
 
@@ -103,7 +111,20 @@ for (file in classif_feats_seq_files){
   }
 }
 
-plot_classif_feat_seq(path, paste0('../output/',model_prefix), n_best_val = 1000)
+plot_classif_feat_seq(path, paste0('../output/',model_prefix,"_"), n_best_val = 1000)
+
+top_df = path %>% 
+  dplyr::top_n(., -1000, logloss.test.mean) %>%
+  dplyr::select(-logloss.test.mean) %>%
+  dplyr::summarize_all(., sum) %>%
+  dplyr::mutate_all(., function(x,n) {x/n}, n = 1000) %>%
+  rownames_to_column() %>% 
+  gather(var, value, -rowname) %>%
+  spread(rowname, value)
+
+colnames(top_df) <- c('var',paste0('classif_seq_',model_prefix))
+
+top_df %>% write_csv(.,paste0( '../output/classif_',model_prefix,"_",'seq_feats.csv'))
 ```
 
 ## Wrapper-based feature importance - random loop
@@ -146,48 +167,18 @@ for (file in classif_feats_rand_files){
   }
 }
 
-plot_classif_feat_rand(path, paste0('../output/',model_prefix), n_best_val = 1000)
-```
+plot_classif_feat_rand(path, paste0('../output/',model_prefix,"_"), n_best_val = 1000)
 
-## Wrapper-based feature importance - random loop
+top_df = path %>% 
+  dplyr::top_n(., -1000, logloss.test.mean) %>%
+  dplyr::select(-logloss.test.mean) %>%
+  dplyr::summarize_all(., sum) %>%
+  dplyr::mutate_all(., function(x,n) {x/n}, n = 1000) %>%
+  rownames_to_column() %>% 
+  gather(var, value, -rowname) %>%
+  spread(rowname, value)
 
-We also use random sampling for feature selection. This is more robust to 
-non-convergence, but requires a lot of trials (we use 100,000).
+colnames(top_df) <- c('var',paste0('classif_rand_',model_prefix))
 
-```{r}
-## wrapper-based feature importance - random sampling
-for (i in 1:100){
-  classif_feats_rand = selectFeatures(
-    learner = classif_lrn, task = classif_tsk, resampling = cv5,
-    control = makeFeatSelControlRandom(maxit = 1000), 
-    measures = list(logloss), show.info = FALSE
-    )
-  
-  print(i)
-  saveRDS(classif_feats_rand,
-          paste0('../output/classif_feats_rand_',model_prefix,'/',i,'.rds')
-          )
-}
-```
-
-## Wrapper-based feature importance - random loop
-
-This chunk parses the random sampling results.
-
-```{r}
-classif_feats_rand_files = list.files(
-  paste0('../output/classif_feats_rand_',model_prefix,'/'), full.names = TRUE
-  )
-
-for (file in classif_feats_rand_files){
-  feat_res = read_rds(file)
-  
-  if (file == classif_feats_rand_files[1]){
-    path = feat_res$opt.path$env$path
-  } else {
-    path = rbind(path, feat_res$opt.path$env$path)
-  }
-}
-
-plot_classif_feat_rand(path, paste0('../output/',model_prefix), n_best_val = 1000)
+top_df %>% write_csv(.,paste0( '../output/classif_',model_prefix,"_",'rand_feats.csv'))
 ```

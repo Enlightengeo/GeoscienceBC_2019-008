@@ -59,6 +59,14 @@ regr_lrn = makeLearner("regr.xgboost")
 ```{r}
 plot_regr_filt_importance(regr_tsk,
 paste0('../output/',model_prefix,"_"))
+
+library(tidyverse)
+
+regr_fv = generateFilterValuesData(regr_tsk, 
+    method = c("FSelector_information.gain",
+               "FSelector_symmetrical.uncertainty"))
+
+regr_fv$data %>% write_csv(.,paste0( '../output/regr_',model_prefix,"_",'filter_feats.csv'))
 ```
 
 ```{r, eval = FALSE}
@@ -99,10 +107,22 @@ for (file in regr_feats_seq_files){
   }
 }
 
-plot_regr_feat_seq(
-  path, paste0('../output/',model_prefix),
-  n_best_val = 1000
-  )
+plot_regr_feat_seq(path, paste0('../output/',model_prefix,"_"), n_best_val = 1000)
+
+top_df = path %>%
+  dplyr::mutate(mean_error = (mae.test.mean + rmse.test.rmse)/2) %>%
+  dplyr::top_n(., -1000, mean_error) %>%
+  dplyr::select(-mean_error, -mae.test.mean, -rmse.test.rmse) %>%
+  dplyr::summarize_all(., sum) %>%
+  dplyr::mutate_all(., function(x,n) {x/n}, n = 1000) %>%
+  rownames_to_column() %>% 
+  gather(var, value, -rowname) %>%
+  spread(rowname, value)
+
+colnames(top_df) <- c('var',paste0('regr_rand_',model_prefix))
+
+top_df %>% write_csv(.,paste0( '../output/regr_',model_prefix,"_",'seq_feats.csv'))
+
 
 ```
 
@@ -147,8 +167,19 @@ for (file in regr_feats_rand_files){
   }
 }
 
-plot_regr_feat_rand(
-  path, paste0('../output/',model_prefix), 
-  n_best_val = 1000
-  )
+plot_regr_feat_rand(path, paste0('../output/',model_prefix,"_"), n_best_val = 1000)
+
+top_df = path %>%
+  dplyr::mutate(mean_error = (mae.test.mean + rmse.test.rmse)/2) %>%
+  dplyr::top_n(., -1000, mean_error) %>%
+  dplyr::select(-mean_error, -mae.test.mean, -rmse.test.rmse) %>%
+  dplyr::summarize_all(., sum) %>%
+  dplyr::mutate_all(., function(x,n) {x/n}, n = 1000) %>%
+  rownames_to_column() %>% 
+  gather(var, value, -rowname) %>%
+  spread(rowname, value)
+
+colnames(top_df) <- c('var',paste0('regr_rand_',model_prefix))
+
+top_df %>% write_csv(.,paste0( '../output/regr_',model_prefix,"_",'rand_feats.csv'))
 ```

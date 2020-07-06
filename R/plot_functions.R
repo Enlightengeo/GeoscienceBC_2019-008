@@ -242,7 +242,7 @@ plot_regr_feat_seq <- function(path,
                                   output_path = '../output/',
                                   n_best_val = 1000){
   
-  top_df = path %>% dplyr::top_n(., n_best_val, rmse.test.rmse)
+  top_df = path %>% dplyr::top_n(., -n_best_val, rmse.test.rmse)
   
   top_opt_df <- top_df %>%
     dplyr::select(-mae.test.mean,-rmse.test.rmse) %>%
