@@ -11,7 +11,7 @@ library(geosciencebc2019008)
 run_date = Sys.Date() %>% str_replace_all(., "-", "_")
 knitr::opts_chunk$set(eval = FALSE)
 
-model_prefix = 'cart_wcfd'
+model_prefix = 'cart_wcfd_geo'
 ```
 
 # Load prepared + cleaned data
@@ -27,13 +27,21 @@ aux_cols <- c(
   "cum_gas_to_date_e3m3", "cum_oil_to_date_m3", "cum_water_to_date_m3",
   "cum_cond_to_date_m3", "frac_start_date", "frac_end_date", "min_dist_well",
   "calc_completed_length_m")
+
+geology_input_cols <- c("distance_all_faults_berger_m",
+"distance_divergent_faults_berger_m", "distance_listric_faults_berger_m", 
+"distance_normal_faults_berger_m", "distance_strike_slip_faults_berger_m", 
+"distance_thrust_faults_berger_m", "geothermal_gradient_degc_km", 
+"paleozoic_structure_mss", "pressure_depth_ratio_kpa_m", "shmin_grasby", 
+"third_order_residual_m", "top_montney_isotherm_degc", "top_montney_structure_mss", 
+"top_montney_tvd_mss")
 ```
 
 ## Subset data
 
 ```{r}
 ml_df <- read_rds('../wcfd_data/wcfd_mldf.rds') %>%
-  dplyr::select(-'max_mag', -aux_cols)
+  dplyr::select(-'max_mag', -aux_cols, -geology_input_cols)
 ```
 
 ## Model Setup 
@@ -174,60 +182,4 @@ for (file in classif_feats_rand_files){
 }
 
 plot_classif_feat_rand(path, paste0('../output/',model_prefix), n_best_val = 1000)
-```
-
-## Wrapper-based feature importance - random loop
-
-We also use random sampling for feature selection. This is more robust to 
-non-convergence, but requires a lot of trials (we use 100,000).
-
-```{r}
-## wrapper-based feature importance - random sampling
-for (i in 1:100){
-  classif_feats_rand = selectFeatures(
-    learner = classif_lrn, task = classif_tsk, resampling = cv5,
-    control = makeFeatSelControlRandom(maxit = 1000), 
-    measures = list(logloss), show.info = FALSE
-    )
-  
-  print(i)
-  saveRDS(classif_feats_rand,
-          paste0('../output/classif_feats_rand_',model_prefix,'/',i,'.rds')
-          )
-}
-```
-
-## Wrapper-based feature importance - random loop
-
-This chunk parses the random sampling results.
-
-```{r}
-classif_feats_rand_files = list.files(
-  paste0('../output/classif_feats_rand_',model_prefix,'/'), full.names = TRUE
-  )
-
-for (file in classif_feats_rand_files){
-  feat_res = read_rds(file)
-  
-  if (file == classif_feats_rand_files[1]){
-    path = feat_res$opt.path$env$path
-  } else {
-    path = rbind(path, feat_res$opt.path$env$path)
-  }
-}
-
-plot_classif_feat_rand(path, paste0('../output/',model_prefix,"_"), n_best_val = 1000)
-
-top_df = path %>% 
-  dplyr::top_n(., -1000, logloss.test.mean) %>%
-  dplyr::select(-logloss.test.mean) %>%
-  dplyr::summarize_all(., sum) %>%
-  dplyr::mutate_all(., function(x,n) {x/n}, n = 1000) %>%
-  rownames_to_column() %>% 
-  gather(var, value, -rowname) %>%
-  spread(rowname, value)
-
-colnames(top_df) <- c('var',paste0('classif_rand_',model_prefix))
-
-top_df %>% write_csv(.,paste0( '../output/classif_',model_prefix,"_",'rand_feats.csv'))
 ```
