@@ -94,7 +94,7 @@ for (alpha in seq(3E-3, 8E-3, length.out = 50)){
 
   print(i)
   saveRDS(classif_feats_seq,
-          paste0('../output/classif_feats/',model_prefix,'/seq_',i,'.rds')
+          paste0('../output/classif_feats_',model_prefix,'/seq_',i,'.rds')
           )
 }
 ```
@@ -152,7 +152,7 @@ for (i in 1:100){
   
   print(i)
   saveRDS(classif_feats_rand,
-          paste0('../output/classif_feats_rand_',model_prefix,'/',i,'.rds')
+          paste0('../output/classif_feats_',model_prefix,'/rand_',i,'.rds')
           )
 }
 ```
