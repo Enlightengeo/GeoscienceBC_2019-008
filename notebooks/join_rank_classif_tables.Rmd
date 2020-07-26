@@ -17,13 +17,13 @@ Filter Based Feature Selection
 
 ```{r}
 files = list.files(
-  path = "../output/classif_feat_summary/", 
+  path = "../output/classif_feat_summary_geo/", 
   pattern=paste0('filter_feats.csv'),
   full.names = TRUE)
 
 for (f in files){
   header = f %>%
-    str_replace(.,"../output/classif_feat_summary/classif_","") %>%
+    str_replace(.,"../output/classif_feat_summary_geo/classif_","") %>%
     str_replace(.,"_filter_feats.csv","")
     
   if (f == files[1]){
@@ -47,7 +47,7 @@ filter_feats %>%
   mutate(filter_mean_value = rowMeans(., na.rm=TRUE)) %>%
   mutate(feat = filter_feats$feat) %>%
   select('feat',everything()) %>%
-  write_csv('../output/classif_filter_values.csv')
+  write_csv('../output/classif_geo_filter_values.csv')
 
 rank <- filter_feats %>% 
   remove_rownames %>% 
@@ -56,20 +56,20 @@ rank <- filter_feats %>%
   mutate(filter_mean_rank = rowMeans(., na.rm=TRUE)) %>%
   mutate(feat = filter_feats$feat) %>%
   select('feat',everything()) %>% 
-  write_csv('../output/classif_filter_rank.csv')
+  write_csv('../output/classif_geo_filter_rank.csv')
 ```
 
 Sequential Wrapper Based Feature Selection
 
 ```{r}
 files = list.files(
-  path = "../output/classif_feat_summary/", 
+  path = "../output/classif_feat_summary_geo/", 
   pattern='seq_feats.csv',
   full.names = TRUE)
 
 for (f in files){
   header = f %>%
-    str_replace(.,"../output/classif_feat_summary/classif_","") %>%
+    str_replace(.,"../output/classif_feat_summary_geo/classif_","") %>%
     str_replace(.,"_seq_feats.csv","")
     
   if (f == files[1]){
@@ -84,7 +84,7 @@ seq_feats %>%
   mutate(seq_mean_value = rowMeans(., na.rm=TRUE)) %>%
   mutate(feat = seq_feats$var) %>%
   select('feat',everything()) %>%
-  write_csv('../output/classif_seq_values.csv')
+  write_csv('../output/classif_geo_seq_values.csv')
 
 seq_feats %>% 
   remove_rownames %>% 
@@ -93,20 +93,20 @@ seq_feats %>%
   mutate(seq_mean_rank = rowMeans(., na.rm=TRUE)) %>%
   mutate(feat = seq_feats$var) %>%
   select('feat',everything()) %>% 
-  write_csv('../output/classif_seq_rank.csv')
+  write_csv('../output/classif_geo_seq_rank.csv')
 ```
 
 Random Wrapper Based Feature Selection
 
 ```{r}
 files = list.files(
-  path = "../output/classif_feat_summary/", 
+  path = "../output/classif_feat_summary_geo/", 
   pattern='rand_feats.csv',
   full.names = TRUE)
 
 for (f in files){
   header = f %>%
-    str_replace(.,"../output/classif_feat_summary/classif_","") %>%
+    str_replace(.,"../output/classif_feat_summary_geo/classif_","") %>%
     str_replace(.,"_rand_feats.csv","")
     
   if (f == files[1]){
@@ -121,7 +121,7 @@ rand_feats %>%
   mutate(rand_mean_value = rowMeans(., na.rm=TRUE)) %>%
   mutate(feat = rand_feats$var) %>%
   select('feat',everything()) %>%
-  write_csv('../output/classif_rand_values.csv')
+  write_csv('../output/classif_geo_rand_values.csv')
 
 rand_feats %>% 
   remove_rownames %>% 
@@ -130,19 +130,19 @@ rand_feats %>%
   mutate(rand_mean_rank = rowMeans(., na.rm=TRUE)) %>%
   mutate(feat = rand_feats$var) %>%
   select('feat',everything()) %>% 
-  write_csv('../output/classif_rand_rank.csv')
+  write_csv('../output/classif_geo_rand_rank.csv')
 ```
 
 Join all tables and final mean rank
 
 ```{r}
-filter <- read_csv('../output/classif_filter_rank.csv') %>%
+filter <- read_csv('../output/classif_geo_filter_rank.csv') %>%
   select(feat, filter_mean_rank)
 
-seq <- read_csv('../output/classif_seq_rank.csv') %>%
+seq <- read_csv('../output/classif_geo_seq_rank.csv') %>%
   select(feat, seq_mean_rank)
 
-rand <- read_csv('../output/classif_rand_rank.csv') %>%
+rand <- read_csv('../output/classif_geo_rand_rank.csv') %>%
   select(feat, rand_mean_rank)
 
 final <- filter %>%
@@ -153,5 +153,5 @@ final <- filter %>%
   mutate(feat=filter$feat) %>%
   arrange(desc(final_rank)) %>%
   select(feat, everything()) %>%
-  write_csv('../output/classif_final_rank.csv')
+  write_csv('../output/classif_geo_final_rank.csv')
 ```
