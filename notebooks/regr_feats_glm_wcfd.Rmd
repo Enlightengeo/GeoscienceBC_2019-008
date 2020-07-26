@@ -79,8 +79,8 @@ regr_fv$data %>% write_csv(.,paste0( '../output/regr_',model_prefix,"_",'filter_
 
 ```{r}
 ## wrapper-based feature importance - sequential forward sampling
-for (alpha in seq(9.41E-4, 9.9E-4, length.out = 20)){
-  i = which(alpha == seq(9.41E-4, 9.9E-4, length.out = 20))
+for (alpha in seq(9.45E-4, 9.9E-4, length.out = 20)){
+  i = which(alpha == seq(9.45E-4, 9.9E-4, length.out = 20))
   
   regr_feats_seq = suppressWarnings(selectFeatures(
   learner = regr_lrn, task = regr_tsk, resampling = cv5,

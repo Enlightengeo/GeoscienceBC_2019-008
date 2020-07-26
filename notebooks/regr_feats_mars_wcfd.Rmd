@@ -12,7 +12,7 @@ output:
 library(geosciencebc2019008)
 run_date = Sys.Date() %>% str_replace_all(., "-", "_")
 
-model_prefix = 'mars_wcfd'
+model_prefix = 'mars_wcfd_geo'
 ```
 
 ## ML Dataframe Prep
@@ -29,7 +29,15 @@ aux_cols <- c(
   "mean_easting", "mean_northing", "on_prod_date",
   "last_reported_date", "cum_gas_to_date_e3m3", "cum_oil_to_date_m3",
   "cum_water_to_date_m3", "cum_cond_to_date_m3", "frac_start_date",
-  "frac_end_date", "min_dist_well", "calc_completed_length_m")
+  "frac_end_date", "min_dist_well")
+
+geology_input_cols <- c("distance_all_faults_berger_m",
+"distance_divergent_faults_berger_m", "distance_listric_faults_berger_m", 
+"distance_normal_faults_berger_m", "distance_strike_slip_faults_berger_m", 
+"distance_thrust_faults_berger_m", "geothermal_gradient_degc_km", 
+"paleozoic_structure_mss", "pressure_depth_ratio_kpa_m", "shmin_grasby", 
+"third_order_residual_m", "top_montney_isotherm_degc", "top_montney_structure_mss", 
+"top_montney_tvd_mss")
 ```
 
 ## Load and subset data
@@ -38,7 +46,7 @@ aux_cols <- c(
 # load prepared data
 ml_df <- read_rds('../wcfd_data/wcfd_mldf.rds') %>%
   dplyr::filter(seismogenic == 1) %>%
-  dplyr::select(-'seismogenic', -aux_cols)
+  dplyr::select(-'seismogenic', -aux_cols, -geology_input_cols)
 ```
 
 ## Feature Selection
