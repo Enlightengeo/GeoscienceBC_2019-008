@@ -1,0 +1,206 @@
+---
+title: "Classification Wrapper: Cart Model BCOGC"
+author: "Scott McKean"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+library(geosciencebc2019008)
+library(gridExtra)
+run_date = Sys.Date() %>% str_replace_all(., "-", "_")
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+# Load prepared + cleaned data
+
+Load cleaned data (ml_df) from rds object
+
+```{r}
+target = "seismogenic"
+
+comp_feats = c(
+  "calc_total_fluid_m3", "mean_rate_m3_min", "mean_proppant_per_stage_t",
+  "proppant_cat.hybrid", "horiz_wells_in_5km", "min_midpoint_dist",
+  "calc_completed_length_m"
+)
+
+geo_feats = c(
+  "paleozoic_structure_mss", "geothermal_gradient_degc_km", "shmin_grasby",
+  "distance_listric_faults_berger_m", "distance_normal_faults_berger_m"
+)
+ 
+final_feats = c(comp_feats, geo_feats)
+
+ml_df <- read_rds("../wcfd_data/final_wcfd_mldf.rds") %>%
+  dplyr::select(all_of(target), all_of(final_feats))
+
+set.seed(2019008)
+train_rows = sample(nrow(ml_df)*0.9)
+
+train = ml_df[train_rows,]
+test = ml_df[-train_rows,]
+```
+
+## Final Model Tuning
+
+CART models hyperparameters are automatically set in MLR, which I think
+is fine for the purpose of this study. Here we bootstrap 1000 models to
+quantify the bias (average logloss) and variance (standard deviation of logloss)
+of the model for comparison to other models.
+
+```{r}
+model_prefix = 'cart_wcfd'
+task = makeClassifTask(data = train, target = target)
+meas = list(logloss, f1, mmce)
+learner = makeLearner("classif.rpart", predict.type = "prob")
+learner_usw = makeUndersampleWrapper(learner, usw.rate=0.25)
+
+# performance measures
+resample = mlr::resample(
+  learner_usw, task, 
+  makeResampleDesc("Subsample", iters=100, split=4/5, predict='both'),  
+  measures = meas,
+  show.info = FALSE
+  )
+
+resample_res = get_resample_class_res(resample)
+print(resample_res)
+
+write_rds(resample_res, paste0('../output/',model_prefix,"_resample.rds"))
+
+# train final model on a random subset
+model = train(learner, task)
+predict = predict(model, newdata=test)
+performance(predict, measures = meas)
+predictor = Predictor$new(model, data = ml_df)
+```
+
+## Residual / Confusion Matrix / Threshold
+
+```{r}
+# threshold vs performance
+pvs = generateThreshVsPerfData(predict, measures = list(fpr, tpr, mmce))
+pvs_plot = plotThreshVsPerf(pvs)
+
+pvs_plot +
+  theme_minimal() +
+  ggsave(paste0('../output/',model_prefix,"_pvsplot.jpg"), width = 10, height = 6)
+
+plotROCCurves(pvs)
+```
+
+## Feature Importance and Interaction
+
+```{r}
+# importance plot
+classif_importance = getFeatureImportance(model)
+feat_imp = plot_feat_imp(classif_importance, label=model_prefix)
+
+p1 = ggplot(feat_imp$data) +
+  geom_col(aes(x = key, y = value)) +
+  labs(x = 'Feature', y = 'Importance') +
+  coord_flip() +
+  theme_minimal()
+
+interact = Interaction$new(predictor)
+
+p2 = ggplot(as.data.frame(interact$results) %>% filter(.class == 'X1')) +
+  geom_col(aes(x = .feature, y = .interaction)) +
+  labs(x = '', y = 'Interaction') +
+  coord_flip() +
+  theme_minimal()
+
+ggsave(file = paste0('../output/',model_prefix,"_impintplot.jpg"), 
+       arrangeGrob(grobs = list(p1,p2), nrow=1),
+       width = 12, height = 8)
+```
+
+## Confusion Matrix and Threshold
+
+```{r}
+calculateConfusionMatrix(predict, relative = TRUE, sums = TRUE)
+
+p1 = plotLearnerPrediction(
+  learner, task = task, 
+  features = c("distance_listric_faults_berger_m", "distance_normal_faults_berger_m"),
+  measures = logloss
+  )
+
+p2 = plotLearnerPrediction(
+  learner, task = task, 
+  features = c("distance_listric_faults_berger_m", "horiz_wells_in_5km"),
+  measures = logloss
+  )
+
+p3 = plotLearnerPrediction(
+  learner, task = task, 
+  features = c("distance_listric_faults_berger_m", "shmin_grasby"),
+  measures = logloss
+  )
+
+p4 = plotLearnerPrediction(
+  learner, task = task, 
+  features = c("distance_listric_faults_berger_m", "shmin_grasby"),
+  measures = logloss
+  )
+
+ggsave(file = paste0('../output/',model_prefix,"_learnpreds.jpg"), 
+       arrangeGrob(grobs = list(p1,p2,p3,p4), nrow=2),
+       width = 12, height = 8)
+```
+
+## Partial Dependence & ICE Plots
+
+```{r}
+# partial dependence plot
+make_pdp_plot <- function(i, predictor, feats){
+  pdp <- FeatureEffect$new(predictor, method = 'pdp+ice', 
+                           feature = feats[i], center.at = 0.5)
+  
+  plot(pdp) + theme_minimal() + theme(axis.title.y=element_blank())
+}
+
+plist <- map(.x = 1:length(final_feats), .f = make_pdp_plot,
+             predictor = predictor, feats = final_feats)
+
+ggsave(file = paste0('../output/',model_prefix,"_pdpplot.jpg"), 
+       arrangeGrob(grobs = plist, ncol = 3, left = 'Seismogenic'),
+       width = 12, height = 8)
+
+```
+
+## LIME & SHAP
+
+```{r}
+shap_wells = c(595, 1000)
+#ml_df[good_wells,] %>% pull('seismogenic')
+
+for (well in shap_wells){
+  lime.explain = LocalModel$new(predictor, 
+                                x.interest = ml_df[well,],
+                                k = length(final_feats))
+  
+  p1 = ggplot(lime.explain$results %>% filter(.class == 'X1')) +
+    geom_col(aes(x = feature, y = effect)) +
+    labs(x = 'Feature', y = 'LIME Effect') +
+    coord_flip() +
+    theme_minimal()
+  
+  shapley = Shapley$new(predictor,
+                        x.interest = ml_df[well,] %>% 
+                          dplyr::select(final_feats),
+                        sample.size = 100)
+  
+  p2 = ggplot(shapley$results %>% filter(class == 'X1')) +
+    geom_col(aes(x = feature, y = phi)) +
+    labs(x = 'Feature', y = 'SHAP Phi') +
+    coord_flip() +
+    theme_minimal()
+  
+  ggsave(file = paste0('../output/',model_prefix,"_",well,"_limeshap.jpg"),
+         arrangeGrob(grobs = list(p1,p2), nrow=1),
+         width = 12, height = 4)
+}
+```

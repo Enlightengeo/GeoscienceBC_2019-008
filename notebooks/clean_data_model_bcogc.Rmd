@@ -1,0 +1,97 @@
+---
+title: "Clean Data"
+author: "Scott McKean"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+# Geoscience BC Study Code - Machine Learning Wrapper
+
+```{r setup, include=FALSE}
+library(geosciencebc2019008)
+run_date = Sys.Date() %>% str_replace_all(., "-", "_")
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+# Load prepared data
+
+This chunk loads our prepared data (see `prepare_data.Rmd`)
+
+```{R}
+saf_wells_sf <- read_rds('../output/bcogc_saf_well_data.rds')
+geologic_input_data = FALSE
+```
+
+## ML Dataframe Prep
+
+This chunk prepares our dataframe for the data science workflows (exploratory
+data analysis, feature selection, model generation, and model interpretation). 
+It specifies auxillary columns (those useful for information), predictor columns, 
+and our target column(s), which for classificatio is the seimogenic (T/F)
+association. Some of the columns, filtering, and imputation are specific for the 
+classification problem, although the bits of code are very similar.
+
+```{r}
+aux_cols <- c(
+  "unique_surv_id", "wa_num", "ground_elevtn",
+  "mean_easting", "mean_northing", "on_prod_date"
+  )
+
+class_comp_feats = c(
+  "calc_total_fluid_m3", "mean_rate_m3_min", "mean_proppant_per_stage_t",
+  "proppant_cat", "horiz_wells_in_5km", "min_midpoint_dist",
+  "calc_completed_length_m"
+  )
+
+class_geo_feats = c(
+  "paleozoic_structure_mss", "geothermal_gradient_degc_km", "shmin_grasby",
+  "distance_listric_faults_berger_m", "distance_normal_faults_berger_m"
+  )
+
+regr_comp_feats  = c(
+  "calc_total_fluid_m3", "calc_total_proppant_t", "calc_completed_length_m",
+  "n_stages", "min_midpoint_dist"
+  )
+
+regr_geo_feats = c(
+  "pressure_depth_ratio_kpa_m", "top_montney_structure_mss", "third_order_residual_m",
+  "geothermal_gradient_degc_km", "distance_listric_faults_berger_m",
+  "distance_normal_faults_berger_m"
+  )
+
+targets <- c("seismogenic", "max_mag")
+
+ml_df <- saf_wells_sf %>%
+  st_drop_geometry() %>% 
+  dplyr::select(
+    all_of(aux_cols), all_of(class_comp_feats), all_of(class_geo_feats), 
+    all_of(regr_comp_feats), all_of(regr_geo_feats), all_of(targets)
+    ) %>%
+  dplyr::mutate_if(is.logical, as.numeric) %>%
+  dplyr::filter(
+    min_midpoint_dist < 25000,
+    shmin_grasby > 0) %>%
+  dplyr::filter(
+    !is.na(mean_proppant_per_stage_t),
+    min_midpoint_dist >0) %>%
+  dplyr::mutate(seismogenic = as.factor(seismogenic))
+  
+# impute non-causal features
+ml_df = impute(ml_df, cols = list(
+  mean_rate_m3_min = imputeMean()
+  ))$data
+
+# one hot encode categorical variables
+ml_df <- createDummyFeatures(
+  ml_df, target = "seismogenic", cols = c("proppant_cat")) %>% 
+  removeConstantFeatures(.) %>%
+  dplyr::select(-proppant_cat.ceramic, -proppant_cat.resin.coated, -proppant_cat.sand)
+```
+
+# Write csv and rds for future use
+
+```{r}
+write_csv(ml_df, paste0("../output/","final_bcgoc_mldf.csv"))
+write_rds(ml_df, paste0("../output/","final_bcogc_mldf.rds"))
+```
