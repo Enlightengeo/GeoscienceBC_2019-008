@@ -51,16 +51,21 @@ quantify the bias (average logloss) and variance (standard deviation of logloss)
 of the model for comparison to other models.
 
 ```{r}
-model_prefix = 'cart_wcfd'
+model_prefix = 'xgboost_wcfd'
 task = makeClassifTask(data = train, target = target)
 meas = list(logloss, f1, mmce)
-learner = makeLearner("classif.rpart", predict.type = "prob")
+learner = makeLearner("classif.xgboost", predict.type = "prob")
 
 # hyperparameter tuning with 5-fold cross-validation & MBO optimization
 pset= makeParamSet(
-  makeNumericParam('cp',lower = -3, upper = -0.1, trafo = function(x) 10^x),
-  makeIntegerParam('maxdepth', lower = 5, upper = 30),
-  makeIntegerParam('minsplit', lower = 2, upper = 50)
+  makeNumericParam("eta", lower = 0.1, upper = 0.6),
+  makeNumericParam("gamma", lower = 0.1, upper = 10),
+  makeNumericParam("lambda", lower = -1, upper = 2, trafo = function(x) 10^x),
+  makeIntegerParam("nrounds", lower = 50, upper = 150),
+  makeIntegerParam("max_depth", lower = 1, upper = 6),
+  makeNumericParam("colsample_bytree", lower = 0.3, upper = 0.7),
+  makeNumericParam("alpha", lower = 0, upper =1),
+  makeIntegerParam("min_child_weight", lower = 1, upper = 7)
 )
 
 tune_res = tuneParams(
@@ -75,7 +80,7 @@ write_rds(tune_res, paste0('../output/',model_prefix,"_tune_res.rds"))
 tuned_learner = setHyperPars(learner = learner, par.vals = tune_res$x)
 learner_usw = makeUndersampleWrapper(tuned_learner, usw.rate=0.25)
 
-# monte-carlo performance measures
+# performance measures
 resample = mlr::resample(
   learner_usw, task, 
   makeResampleDesc("Subsample", iters=100, split=4/5, predict='both'),  
@@ -88,7 +93,7 @@ print(resample_res)
 
 write_rds(resample_res, paste0('../output/',model_prefix,"_resample.rds"))
 
-# train final model for performance and interpretation
+# train final model on a random subset
 model = train(learner, task)
 predict = predict(model, newdata=test)
 performance(predict, measures = meas)
@@ -110,6 +115,9 @@ plotROCCurves(pvs)
 ```
 
 ## Feature Importance and Interaction
+
+A GLM doesn't have feature importance, so we use a filter based method for the 
+plots using information gain
 
 ```{r}
 # importance plot

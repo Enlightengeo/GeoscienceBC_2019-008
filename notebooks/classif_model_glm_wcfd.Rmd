@@ -55,7 +55,24 @@ model_prefix = 'glm_wcfd'
 task = makeClassifTask(data = train, target = target)
 meas = list(logloss, f1, mmce)
 learner = makeLearner("classif.glmnet", predict.type = "prob")
-learner_usw = makeUndersampleWrapper(learner, usw.rate=0.25)
+
+# hyperparameter tuning with 5-fold cross-validation & MBO optimization
+pset= makeParamSet(
+  makeNumericParam('alpha',lower = 0, upper = 1),
+  makeIntegerParam('lambda', lower = -4, upper = 1, trafo = function(x) 10^x)
+)
+
+tune_res = tuneParams(
+  learner, task, resampling=cv5, par.set=pset, 
+  control=makeTuneControlMBO(budget = 30L),
+  measures=meas
+)
+
+write_rds(tune_res, paste0('../output/',model_prefix,"_tune_res.rds"))
+
+# set hyperparameters
+tuned_learner = setHyperPars(learner = learner, par.vals = tune_res$x)
+learner_usw = makeUndersampleWrapper(tuned_learner, usw.rate=0.25)
 
 # performance measures
 resample = mlr::resample(
