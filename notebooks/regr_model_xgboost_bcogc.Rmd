@@ -12,8 +12,8 @@ output:
 library(geosciencebc2019008)
 run_date = Sys.Date() %>% str_replace_all(., "-", "_")
 
-model_prefix = 'xgboost_wcfd'
-input_file = "../wcfd_data/final_wcfd_mldf.rds"
+model_prefix = 'xgboost_bcogc'
+input_file = "../output/bcogc_mldf.rds"
 ```
 
 ## ML Dataframe Prep

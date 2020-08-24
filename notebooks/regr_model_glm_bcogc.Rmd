@@ -1,5 +1,5 @@
 ---
-title: "Regression Feature Selection Wrapper: MARS w/ WCFD data"
+title: "Regression Feature Selection Wrapper: GLMNET w/ WCFD data"
 author: "Scott McKean"
 output:
   pdf_document: default
@@ -12,8 +12,8 @@ output:
 library(geosciencebc2019008)
 run_date = Sys.Date() %>% str_replace_all(., "-", "_")
 
-model_prefix = 'xgboost_wcfd'
-input_file = "../wcfd_data/final_wcfd_mldf.rds"
+model_prefix = 'glm_bcogc'
+input_file = "../output/bcogc_mldf.rds"
 ```
 
 ## ML Dataframe Prep
@@ -52,7 +52,7 @@ test = ml_df[-train_rows,]
 ## Final Model Tuning
 
 ```{r}
-learner = makeLearner("regr.xgboost")
+learner = makeLearner("regr.glmnet")
 
 train_task = makeRegrTask(data = train, target = target)
 test_task = makeRegrTask(data = test, target = target)
@@ -60,22 +60,16 @@ all_task = makeRegrTask(data = ml_df, target = target)
 meas = list(mae, rmse)
 
 # hyperparameter tuning with 5-fold cross-validation & MBO optimization
-pset = makeParamSet(
-  makeNumericParam("eta", lower = 0.1, upper = 0.6),
-  makeNumericParam("gamma", lower = 0.1, upper = 10),
-  makeNumericParam("lambda", lower = -1, upper = 2, trafo = function(x) 10^x),
-  makeIntegerParam("nrounds", lower = 50, upper = 150),
-  makeIntegerParam("max_depth", lower = 1, upper = 6),
-  makeNumericParam("colsample_bytree", lower = 0.3, upper = 0.7),
-  makeNumericParam("alpha", lower = 0, upper =1),
-  makeIntegerParam("min_child_weight", lower = 1, upper = 7)
+pset= makeParamSet(
+  makeNumericParam('alpha',lower = 0, upper = 1),
+  makeIntegerParam('lambda', lower = -4, upper = 1, trafo = function(x) 10^x)
 )
 
-tune_res = suppressWarnings(tuneParams(
+tune_res = tuneParams(
   learner, train_task, resampling=cv5, par.set=pset, 
   control=makeTuneControlMBO(budget = 30L),
   measures=meas
-  ))
+)
 
 write_rds(tune_res, paste0('../output/',model_prefix,"_tune_res.rds"))
 

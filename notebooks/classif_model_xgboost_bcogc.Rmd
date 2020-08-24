@@ -94,9 +94,14 @@ print(resample_res)
 write_rds(resample_res, paste0('../output/',model_prefix,"_resample.rds"))
 
 # train final model on a random subset
-model = train(learner, task)
-predict = predict(model, newdata=test)
+model = train(tuned_learner, task)
+
+test_predict = predict(model, newdata=test)
 performance(predict, measures = meas)
+
+train_predict = predict(model, newdata=train)
+performance(predict, measures = meas)
+
 predictor = Predictor$new(model, data = ml_df)
 ```
 

@@ -142,25 +142,25 @@ ggsave(file = paste0('../output/',model_prefix,"_impintplot.jpg"),
 calculateConfusionMatrix(predict, relative = TRUE, sums = TRUE)
 
 p1 = plotLearnerPrediction(
-  learner, task = task, 
+  tuned_learner, task = task, 
   features = c("distance_listric_faults_berger_m", "distance_normal_faults_berger_m"),
   measures = logloss
   )
 
 p2 = plotLearnerPrediction(
-  learner, task = task, 
+  tuned_learner, task = task, 
   features = c("distance_listric_faults_berger_m", "horiz_wells_in_5km"),
   measures = logloss
   )
 
 p3 = plotLearnerPrediction(
-  learner, task = task, 
+  tuned_learner, task = task, 
   features = c("distance_listric_faults_berger_m", "shmin_grasby"),
   measures = logloss
   )
 
 p4 = plotLearnerPrediction(
-  learner, task = task, 
+  tuned_learner, task = task, 
   features = c("distance_listric_faults_berger_m", "shmin_grasby"),
   measures = logloss
   )
@@ -194,7 +194,6 @@ ggsave(file = paste0('../output/',model_prefix,"_pdpplot.jpg"),
 
 ```{r}
 shap_wells = c(595, 1000)
-#ml_df[good_wells,] %>% pull('seismogenic')
 
 for (well in shap_wells){
   lime.explain = LocalModel$new(predictor, 
