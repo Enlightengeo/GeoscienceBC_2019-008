@@ -1,5 +1,5 @@
 ---
-title: "Classification Wrapper: Cart Model BCOGC"
+title: "Classification Wrapper: Cart Model w/ BCOGC Data"
 author: "Scott McKean"
 output:
   pdf_document: default
@@ -8,14 +8,24 @@ output:
 
 ```{r setup, include=FALSE}
 library(geosciencebc2019008)
-library(gridExtra)
 run_date = Sys.Date() %>% str_replace_all(., "-", "_")
 knitr::opts_chunk$set(eval = FALSE)
+
+model_prefix = 'classif_model_cart_wcfd/cart_wcfd'
+input_data = "../wcfd_data/final_wcfd_mldf.rds"
+model_type = "classif.rpart"
+
+pset= makeParamSet(
+  makeNumericParam('cp',lower = -3, upper = -0.1, trafo = function(x) 10^x),
+  makeIntegerParam('maxdepth', lower = 5, upper = 30),
+  makeIntegerParam('minsplit', lower = 2, upper = 50)
+)
+
+shap_wells = c(595, 1000)
+
 ```
 
-# Load prepared + cleaned data
-
-Load cleaned data (ml_df) from rds object
+# Train Model
 
 ```{r}
 target = "seismogenic"
@@ -33,7 +43,7 @@ geo_feats = c(
  
 final_feats = c(comp_feats, geo_feats)
 
-ml_df <- read_rds("../wcfd_data/final_wcfd_mldf.rds") %>%
+ml_df <- read_rds(input_data) %>%
   dplyr::select(all_of(target), all_of(final_feats))
 
 set.seed(2019008)
@@ -41,30 +51,18 @@ train_rows = sample(nrow(ml_df)*0.9)
 
 train = ml_df[train_rows,]
 test = ml_df[-train_rows,]
-```
 
-## Final Model Tuning
+## Model Tuning
+train_task = makeClassifTask(data = train, target = target)
+test_task = makeClassifTask(data = test, target = target)
+all_task = makeClassifTask(data = ml_df, target = target)
 
-CART models hyperparameters are automatically set in MLR, which I think
-is fine for the purpose of this study. Here we bootstrap 1000 models to
-quantify the bias (average logloss) and variance (standard deviation of logloss)
-of the model for comparison to other models.
-
-```{r}
-model_prefix = 'cart_wcfd'
-task = makeClassifTask(data = train, target = target)
 meas = list(logloss, f1, mmce)
-learner = makeLearner("classif.rpart", predict.type = "prob")
+learner = makeLearner(model_type, predict.type = "prob")
 
 # hyperparameter tuning with 5-fold cross-validation & MBO optimization
-pset= makeParamSet(
-  makeNumericParam('cp',lower = -3, upper = -0.1, trafo = function(x) 10^x),
-  makeIntegerParam('maxdepth', lower = 5, upper = 30),
-  makeIntegerParam('minsplit', lower = 2, upper = 50)
-)
-
 tune_res = tuneParams(
-  learner, task, resampling=cv5, par.set=pset, 
+  learner, train_task, resampling=cv5, par.set=pset, 
   control=makeTuneControlMBO(budget = 30L),
   measures=meas
 )
@@ -73,48 +71,55 @@ write_rds(tune_res, paste0('../output/',model_prefix,"_tune_res.rds"))
 
 # set hyperparameters
 tuned_learner = setHyperPars(learner = learner, par.vals = tune_res$x)
-learner_usw = makeUndersampleWrapper(tuned_learner, usw.rate=0.25)
+
+# train final model for performance and interpretation
+model = train(tuned_learner, train_task)
+predictor = Predictor$new(model, data = ml_df)
 
 # monte-carlo performance measures
 resample = mlr::resample(
-  learner_usw, task, 
+  tuned_learner, all_task, 
   makeResampleDesc("Subsample", iters=100, split=4/5, predict='both'),  
   measures = meas,
   show.info = FALSE
   )
 
-resample_res = get_resample_class_res(resample)
-print(resample_res)
+model_res = get_resample_class_res(resample)
 
-write_rds(resample_res, paste0('../output/',model_prefix,"_resample.rds"))
-
-# train final model for performance and interpretation
-model = train(learner, task)
-predict = predict(model, newdata=test)
-performance(predict, measures = meas)
-predictor = Predictor$new(model, data = ml_df)
+model_res$train_perf = performance(predict(model, newdata=train), measures = meas)
+model_res$test_perf = performance(predict(model, newdata=test), measures = meas)
+model_res$model = model
+model_res$tuned_learner = tuned_learner
+model_res$train_conf = calculateConfusionMatrix(
+  predict(model, newdata=train), relative = TRUE, sums = TRUE
+  )
+model_res$test_conf = calculateConfusionMatrix(
+  predict(model, newdata=test), relative = TRUE, sums = TRUE
+  )
+print(model_res)
+write_rds(model_res, paste0('../output/',model_prefix,"_model_results.rds"))
 ```
 
-## Residual / Confusion Matrix / Threshold
+## Model Interpretation
 
 ```{r}
-# threshold vs performance
-pvs = generateThreshVsPerfData(predict, measures = list(fpr, tpr, mmce))
+## Threshold vs Performance
+pvs = generateThreshVsPerfData(
+  predict(model, newdata=ml_df), 
+  measures = list(fpr, tpr, mmce))
+
 pvs_plot = plotThreshVsPerf(pvs)
 
 pvs_plot +
   theme_minimal() +
-  ggsave(paste0('../output/',model_prefix,"_pvsplot.jpg"), width = 10, height = 6)
+  ggsave(paste0('../output/',model_prefix,"_pvsplot.jpg"), width=12, height=8)
 
-plotROCCurves(pvs)
-```
+plotROCCurves(pvs) +
+  theme_minimal() +
+  ggsave(paste0('../output/',model_prefix,"_roccurve.jpg"), width=6, height=6)
 
 ## Feature Importance and Interaction
-
-```{r}
-# importance plot
-classif_importance = getFeatureImportance(model)
-feat_imp = plot_feat_imp(classif_importance, label=model_prefix)
+feat_imp = plot_feat_imp(getFeatureImportance(model), label=model_prefix)
 
 p1 = ggplot(feat_imp$data) +
   geom_col(aes(x = key, y = value)) +
@@ -133,33 +138,29 @@ p2 = ggplot(as.data.frame(interact$results) %>% filter(.class == 'X1')) +
 ggsave(file = paste0('../output/',model_prefix,"_impintplot.jpg"), 
        arrangeGrob(grobs = list(p1,p2), nrow=1),
        width = 12, height = 8)
-```
 
 ## Confusion Matrix and Threshold
 
-```{r}
-calculateConfusionMatrix(predict, relative = TRUE, sums = TRUE)
-
 p1 = plotLearnerPrediction(
-  learner, task = task, 
+  learner, task = all_task, 
   features = c("distance_listric_faults_berger_m", "distance_normal_faults_berger_m"),
   measures = logloss
   )
 
 p2 = plotLearnerPrediction(
-  learner, task = task, 
+  learner, task = all_task, 
   features = c("distance_listric_faults_berger_m", "horiz_wells_in_5km"),
   measures = logloss
   )
 
 p3 = plotLearnerPrediction(
-  learner, task = task, 
+  learner, task = all_task, 
   features = c("distance_listric_faults_berger_m", "shmin_grasby"),
   measures = logloss
   )
 
 p4 = plotLearnerPrediction(
-  learner, task = task, 
+  learner, task = all_task, 
   features = c("distance_listric_faults_berger_m", "shmin_grasby"),
   measures = logloss
   )
@@ -167,12 +168,9 @@ p4 = plotLearnerPrediction(
 ggsave(file = paste0('../output/',model_prefix,"_learnpreds.jpg"), 
        arrangeGrob(grobs = list(p1,p2,p3,p4), nrow=2),
        width = 12, height = 8)
-```
 
 ## Partial Dependence & ICE Plots
 
-```{r}
-# partial dependence plot
 make_pdp_plot <- function(i, predictor, feats){
   pdp <- FeatureEffect$new(predictor, method = 'pdp+ice', 
                            feature = feats[i], center.at = 0.5)
@@ -187,13 +185,7 @@ ggsave(file = paste0('../output/',model_prefix,"_pdpplot.jpg"),
        arrangeGrob(grobs = plist, ncol = 3, left = 'Seismogenic'),
        width = 12, height = 8)
 
-```
-
 ## LIME & SHAP
-
-```{r}
-shap_wells = c(595, 1000)
-#ml_df[good_wells,] %>% pull('seismogenic')
 
 for (well in shap_wells){
   lime.explain = LocalModel$new(predictor, 
