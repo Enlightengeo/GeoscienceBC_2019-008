@@ -90,7 +90,6 @@ resample = mlr::resample(
   )
 
 model_res = get_resample_class_res(resample)
-
 model_res$train_perf = performance(predict(model, newdata=train), measures = meas)
 model_res$test_perf = performance(predict(model, newdata=test), measures = meas)
 model_res$model = model

@@ -1,5 +1,5 @@
 ---
-title: "Regression Feature Selection Wrapper: MARS w/ WCFD data"
+title: "Regression Feature Selection Wrapper: GLMNET w/ WCFD data"
 author: "Scott McKean"
 output:
   pdf_document: default
@@ -12,8 +12,23 @@ output:
 library(geosciencebc2019008)
 run_date = Sys.Date() %>% str_replace_all(., "-", "_")
 
-model_prefix = 'xgboost_bcogc'
-input_file = "../output/bcogc_mldf.rds"
+model_prefix = 'regr_model_xgboost_bcogc/xgboost_bcogc'
+input_data = "../output/bcogc_mldf.rds"
+model_type = "regr.xgboost"
+
+pset = makeParamSet(
+  makeNumericParam("eta", lower = 0.1, upper = 0.6),
+  makeNumericParam("gamma", lower = 0.1, upper = 10),
+  makeNumericParam("lambda", lower = -1, upper = 2, trafo = function(x) 10^x),
+  makeIntegerParam("nrounds", lower = 50, upper = 150),
+  makeIntegerParam("max_depth", lower = 1, upper = 6),
+  makeNumericParam("colsample_bytree", lower = 0.3, upper = 0.7),
+  makeNumericParam("alpha", lower = 0, upper =1),
+  makeIntegerParam("min_child_weight", lower = 1, upper = 7)
+)
+
+shap_wells = c(123, 255)
+
 ```
 
 ## ML Dataframe Prep
@@ -38,7 +53,7 @@ regr_geo_feats = c(
 
 final_feats = c(regr_comp_feats, regr_geo_feats)
 
-ml_df <- read_rds(input_file) %>%
+ml_df <- read_rds(input_data) %>%
   dplyr::filter(seismogenic == 1) %>%
   dplyr::select(all_of(target), all_of(final_feats))
 
@@ -47,12 +62,8 @@ train_rows = sample(nrow(ml_df)*0.9)
 
 train = ml_df[train_rows,]
 test = ml_df[-train_rows,]
-```
 
-## Final Model Tuning
-
-```{r}
-learner = makeLearner("regr.xgboost")
+learner = makeLearner(model_type)
 
 train_task = makeRegrTask(data = train, target = target)
 test_task = makeRegrTask(data = test, target = target)
@@ -60,22 +71,11 @@ all_task = makeRegrTask(data = ml_df, target = target)
 meas = list(mae, rmse)
 
 # hyperparameter tuning with 5-fold cross-validation & MBO optimization
-pset = makeParamSet(
-  makeNumericParam("eta", lower = 0.1, upper = 0.6),
-  makeNumericParam("gamma", lower = 0.1, upper = 10),
-  makeNumericParam("lambda", lower = -1, upper = 2, trafo = function(x) 10^x),
-  makeIntegerParam("nrounds", lower = 50, upper = 150),
-  makeIntegerParam("max_depth", lower = 1, upper = 6),
-  makeNumericParam("colsample_bytree", lower = 0.3, upper = 0.7),
-  makeNumericParam("alpha", lower = 0, upper =1),
-  makeIntegerParam("min_child_weight", lower = 1, upper = 7)
-)
-
-tune_res = suppressWarnings(tuneParams(
+tune_res = tuneParams(
   learner, train_task, resampling=cv5, par.set=pset, 
   control=makeTuneControlMBO(budget = 30L),
   measures=meas
-  ))
+)
 
 write_rds(tune_res, paste0('../output/',model_prefix,"_tune_res.rds"))
 
@@ -85,10 +85,7 @@ tuned_learner = setHyperPars(learner = learner, par.vals = tune_res$x)
 # train final model for performance and interpretation
 model = train(tuned_learner, train_task)
 test_predict = predict(model, newdata=test)
-performance(test_predict, measures = meas)
-
 train_predict = predict(model, newdata=train)
-performance(train_predict, measures = meas)
 
 predictor = Predictor$new(model, data = ml_df)
 
@@ -100,10 +97,17 @@ resample = mlr::resample(
   show.info = FALSE
   )
 
-resample_res = get_resample_regr_res(resample)
-print(resample_res)
+model_res = get_resample_regr_res(resample)
+model_res$train_perf = performance(predict(model, newdata=train), measures = meas)
+model_res$test_perf = performance(predict(model, newdata=test), measures = meas)
+model_res$model = model
+model_res$tuned_learner = tuned_learner
 
-write_rds(resample_res, paste0('../output/',model_prefix,"_resample.rds"))
+sink(paste0('../output/',model_prefix,"_model_results.txt"))
+print(model_res)
+sink()
+
+write_rds(model_res, paste0('../output/',model_prefix,"_resample.rds"))
 ```
 
 ## Residual Analysis
@@ -122,11 +126,6 @@ p2 = plotResiduals(test_predict) +
 ggsave(file = paste0('../output/',model_prefix,"_resplot.jpg"), 
        arrangeGrob(grobs = list(p1,p2), nrow=1),
        width = 12, height = 8)
-```
-
-## Prediction Plots
-
-```{r}
 
 p1 = plotLearnerPrediction(
   tuned_learner, task = all_task, 
@@ -155,13 +154,9 @@ p4 = plotLearnerPrediction(
 ggsave(file = paste0('../output/',model_prefix,"_learnpreds.jpg"), 
        arrangeGrob(grobs = list(p1,p2,p3,p4), nrow=2),
        width = 12, height = 8)
-```
 
-## Feature Importance and Interaction
-
-```{r}
 # importance plot
-imp = FeatureImp$new(predictor, loss='mae')
+imp = FeatureImp$new(predictor, loss='mae', n.repetitions = 50)
 
 p1 = ggplot(imp$results) +
   geom_col(aes(x = feature, y = importance)) +
@@ -180,12 +175,8 @@ p2 = ggplot(as.data.frame(interact$results)) +
 ggsave(file = paste0('../output/',model_prefix,"_impintplot.jpg"), 
        arrangeGrob(grobs = list(p1,p2), nrow=1),
        width = 12, height = 8)
-```
-
-## Partial Dependence & ICE Plots
-
-```{r }        
-   # partial dependence plot
+     
+# partial dependence plot
 make_pdp_plot <- function(i, predictor, feats){
   pdp <- FeatureEffect$new(predictor, method = 'pdp+ice', 
                            feature = feats[i], center.at = 2)
@@ -199,13 +190,6 @@ plist <- map(.x = 1:length(final_feats), .f = make_pdp_plot,
 ggsave(file = paste0('../output/',model_prefix,"_pdpplot.jpg"), 
        arrangeGrob(grobs = plist, ncol = 3, left = 'Magnitude'),
        width = 12, height = 8)
-
-```
-
-## LIME & SHAP
-
-```{r}
-shap_wells = c(123, 255)
 
 for (well in shap_wells){
   lime.explain = LocalModel$new(predictor, 
