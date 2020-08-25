@@ -79,7 +79,7 @@ predictor = Predictor$new(model, data = ml_df)
 # monte-carlo performance measures
 resample = mlr::resample(
   tuned_learner, all_task, 
-  makeResampleDesc("Subsample", iters=100, split=4/5, predict='both'),  
+  makeResampleDesc("Subsample", iters=100, split=4/5, predict='both'),
   measures = meas,
   show.info = FALSE
   )
@@ -96,7 +96,11 @@ model_res$train_conf = calculateConfusionMatrix(
 model_res$test_conf = calculateConfusionMatrix(
   predict(model, newdata=test), relative = TRUE, sums = TRUE
   )
+
+sink(paste0('../output/',model_prefix,"_model_results.txt"))
 print(model_res)
+sink()
+
 write_rds(model_res, paste0('../output/',model_prefix,"_model_results.rds"))
 ```
 

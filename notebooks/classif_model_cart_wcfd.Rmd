@@ -96,7 +96,11 @@ model_res$train_conf = calculateConfusionMatrix(
 model_res$test_conf = calculateConfusionMatrix(
   predict(model, newdata=test), relative = TRUE, sums = TRUE
   )
+
+sink(paste0('../output/',model_prefix,"_model_results.txt"))
 print(model_res)
+sink()
+
 write_rds(model_res, paste0('../output/',model_prefix,"_model_results.rds"))
 ```
 
