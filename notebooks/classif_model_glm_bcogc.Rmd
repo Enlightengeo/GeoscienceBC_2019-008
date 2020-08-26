@@ -20,7 +20,10 @@ pset= makeParamSet(
   makeIntegerParam('lambda', lower = -4, upper = 1, trafo = function(x) 10^x)
 )
 
-shap_wells = c(595, 1000)
+wa_nums = c(32768, 32950, 33857, 33665, 32582, 33161, 29429, 32301, 33113,
+            24035, 33894, 33162, 32574, 32575, 33550,	37346)
+
+shap_wells = which(read_rds(input_data) %>% pull(wa_num) %in% wa_nums)
 
 ```
 
@@ -62,7 +65,7 @@ learner = makeLearner(model_type, predict.type = "prob")
 # hyperparameter tuning with 5-fold cross-validation & MBO optimization
 tune_res = tuneParams(
   learner, train_task, resampling=cv5, par.set=pset, 
-  control=makeTuneControlMBO(budget = 30L),
+  control=makeTuneControlMBO(budget = 100L),
   measures=meas
 )
 
@@ -78,7 +81,7 @@ predictor = Predictor$new(model, data = ml_df)
 # monte-carlo performance measures
 resample = mlr::resample(
   tuned_learner, all_task, 
-  makeResampleDesc("Subsample", iters=100, split=4/5, predict='both'),  
+  makeResampleDesc("Subsample", iters=500, split=4/5, predict='both'),  
   measures = meas,
   show.info = FALSE
   )
@@ -122,11 +125,17 @@ plotROCCurves(pvs) +
   ggsave(paste0('../output/',model_prefix,"_roccurve.jpg"), width=6, height=6)
 
 ## Feature Importance and Interaction
-classif_importance = generateFilterValuesData(all_task, method = "FSelector_information.gain")
+coef = data.frame(
+  'feature' = rownames(coef(getLearnerModel(model))),
+  'coefficient' = matrix(coef(getLearnerModel(model)))
+  ) %>% mutate(coefficient = coefficient) %>% 
+  filter(feature != '(Intercept)') %>%
+  filter(feature != 'proppant_cat.hybrid') %>%
+  mutate(coefficient = (coefficient-mean(coefficient))/sd(coefficient))
 
-p1 = ggplot(classif_importance$data) +
-  geom_col(aes(x = name, y = FSelector_information.gain)) +
-  labs(x = 'Feature', y = 'Importance') +
+p1 = ggplot(coef) +
+  geom_col(aes(x = feature, y = coefficient)) +
+  labs(x = 'Feature', y = 'Coefficient') +
   coord_flip() +
   theme_minimal()
 

@@ -21,8 +21,10 @@ pset= makeParamSet(
   makeIntegerParam('minsplit', lower = 2, upper = 50)
 )
 
-shap_wells = c(595, 1000)
+wa_nums = c(32768, 32950, 33857, 33665, 32582, 33161, 29429, 32301, 33113,
+            24035, 33894, 33162, 32574, 32575, 33550,	37346)
 
+shap_wells = which(read_rds(input_data) %>% pull(wa_num) %in% wa_nums)
 ```
 
 # Train Model
@@ -63,7 +65,7 @@ learner = makeLearner(model_type, predict.type = "prob")
 # hyperparameter tuning with 5-fold cross-validation & MBO optimization
 tune_res = tuneParams(
   learner, train_task, resampling=cv5, par.set=pset, 
-  control=makeTuneControlMBO(budget = 30L),
+  control=makeTuneControlMBO(budget = 100L),
   measures=meas
 )
 
@@ -79,15 +81,15 @@ predictor = Predictor$new(model, data = ml_df)
 # monte-carlo performance measures
 resample = mlr::resample(
   tuned_learner, all_task, 
-  makeResampleDesc("Subsample", iters=100, split=4/5, predict='both'),
+  makeResampleDesc("Subsample", iters=500, split=4/5, predict='both'),
   measures = meas,
   show.info = FALSE
   )
 
 model_res = get_resample_class_res(resample)
 
-model_res$train_perf = performance(predict(model, newdata=train), measures = meas)
-model_res$test_perf = performance(predict(model, newdata=test), measures = meas)
+model_res$train_perf = performance(predict(model, newdata=train), measures=meas)
+model_res$test_perf = performance(predict(model, newdata=test), measures=meas)
 model_res$model = model
 model_res$tuned_learner = tuned_learner
 model_res$train_conf = calculateConfusionMatrix(
@@ -123,7 +125,7 @@ plotROCCurves(pvs) +
   ggsave(paste0('../output/',model_prefix,"_roccurve.jpg"), width=6, height=6)
 
 ## Feature Importance and Interaction
-feat_imp = plot_feat_imp(generateFeatureImportanceData(task=all_task, learner=tuned_learner), label=model_prefix)
+feat_imp = plot_feat_imp(getFeatureImportance(model), label=model_prefix)
 
 p1 = ggplot(feat_imp$data) +
   geom_col(aes(x = key, y = value)) +
