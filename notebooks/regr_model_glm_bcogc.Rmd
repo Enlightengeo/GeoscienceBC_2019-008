@@ -107,11 +107,7 @@ print(model_res)
 sink()
 
 write_rds(model_res, paste0('../output/',model_prefix,"_resample.rds"))
-```
 
-## Residual Analysis
-
-```{r}
 p1 = plotResiduals(train_predict) +
   geom_abline(slope=1,linetype = "dashed") +
   ggtitle("Training Set") +
