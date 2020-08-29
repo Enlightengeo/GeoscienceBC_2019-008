@@ -6,13 +6,13 @@ output:
   html_document: default
 ---
 
-```{r setup, include=FALSE}
+```{r}
 library(geosciencebc2019008)
 run_date = Sys.Date() %>% str_replace_all(., "-", "_")
 knitr::opts_chunk$set(eval = FALSE)
 
 model_prefix = 'classif_model_cart_bcogc/cart_bcogc'
-input_data = "../output/final_bcogc_mldf.rds"
+input_data = "../output/final_bcogc_mldf_class.rds"
 model_type = "classif.glmnet"
 
 pset= makeParamSet(
@@ -25,11 +25,6 @@ wa_nums = c(32768, 32950, 33857, 33665, 32582, 33161, 29429, 32301, 33113,
 
 shap_wells = which(read_rds(input_data) %>% pull(wa_num) %in% wa_nums)
 
-```
-
-# Train Model
-
-```{r}
 target = "seismogenic"
 
 comp_feats = c(

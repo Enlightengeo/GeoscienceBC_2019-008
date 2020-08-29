@@ -23,14 +23,7 @@ saf_wells_sf <- read_rds('../output/bcogc_saf_well_data.rds')
 geologic_input_data = FALSE
 ```
 
-## ML Dataframe Prep
-
-This chunk prepares our dataframe for the data science workflows (exploratory
-data analysis, feature selection, model generation, and model interpretation). 
-It specifies auxillary columns (those useful for information), predictor columns, 
-and our target column(s), which for classificatio is the seimogenic (T/F)
-association. Some of the columns, filtering, and imputation are specific for the 
-classification problem, although the bits of code are very similar.
+## Classification
 
 ```{r}
 aux_cols <- c(
@@ -49,9 +42,39 @@ class_geo_feats = c(
   "distance_listric_faults_berger_m", "distance_normal_faults_berger_m"
   )
 
+targets <- c("seismogenic", "max_mag")
+
+ml_df <- saf_wells_sf %>%
+  st_drop_geometry() %>% 
+  dplyr::select(
+    all_of(aux_cols), all_of(class_comp_feats), all_of(class_geo_feats), all_of(targets)) %>%
+  dplyr::mutate_if(is.logical, as.numeric) %>%
+  dplyr::filter(
+    shmin_grasby > 0,
+    !is.na(mean_proppant_per_stage_t),
+    min_midpoint_dist > 0) %>%
+  dplyr::mutate(seismogenic = as.factor(seismogenic))
+  
+# impute non-causal features
+ml_df = impute(ml_df, cols = list(
+  mean_rate_m3_min = imputeMean()
+  ))$data
+
+# one hot encode categorical variables
+ml_df <- createDummyFeatures(
+  ml_df, target = "seismogenic", cols = c("proppant_cat")) %>% 
+  removeConstantFeatures(.) %>%
+  dplyr::select(-proppant_cat.ceramic, -proppant_cat.resin.coated, -proppant_cat.sand)
+
+write_csv(ml_df, paste0("../output/","final_bcgoc_mldf_class.csv"))
+write_rds(ml_df, paste0("../output/","final_bcogc_mldf_class.rds"))
+```
+
+# Regression
+```{r}
 regr_comp_feats  = c(
   "calc_total_fluid_m3", "calc_total_proppant_t", "calc_completed_length_m",
-  "n_stages", "min_midpoint_dist"
+  "n_stages", "min_midpoint_dist", "mean_rate_m3_min"
   )
 
 regr_geo_feats = c(
@@ -65,16 +88,9 @@ targets <- c("seismogenic", "max_mag")
 ml_df <- saf_wells_sf %>%
   st_drop_geometry() %>% 
   dplyr::select(
-    all_of(aux_cols), all_of(class_comp_feats), all_of(class_geo_feats), 
-    all_of(regr_comp_feats), all_of(regr_geo_feats), all_of(targets)
-    ) %>%
+    all_of(aux_cols), all_of(regr_comp_feats), all_of(regr_geo_feats), all_of(targets)) %>%
   dplyr::mutate_if(is.logical, as.numeric) %>%
-  dplyr::filter(
-    min_midpoint_dist < 25000,
-    shmin_grasby > 0) %>%
-  dplyr::filter(
-    !is.na(mean_proppant_per_stage_t),
-    min_midpoint_dist >0) %>%
+  dplyr::filter(min_midpoint_dist > 0) %>%
   dplyr::mutate(seismogenic = as.factor(seismogenic))
   
 # impute non-causal features
@@ -82,16 +98,6 @@ ml_df = impute(ml_df, cols = list(
   mean_rate_m3_min = imputeMean()
   ))$data
 
-# one hot encode categorical variables
-ml_df <- createDummyFeatures(
-  ml_df, target = "seismogenic", cols = c("proppant_cat")) %>% 
-  removeConstantFeatures(.) %>%
-  dplyr::select(-proppant_cat.ceramic, -proppant_cat.resin.coated, -proppant_cat.sand)
-```
-
-# Write csv and rds for future use
-
-```{r}
-write_csv(ml_df, paste0("../output/","final_bcgoc_mldf.csv"))
-write_rds(ml_df, paste0("../output/","final_bcogc_mldf.rds"))
+write_csv(ml_df, paste0("../output/","final_bcgoc_mldf_regr.csv"))
+write_rds(ml_df, paste0("../output/","final_bcogc_mldf_regr.rds"))
 ```
