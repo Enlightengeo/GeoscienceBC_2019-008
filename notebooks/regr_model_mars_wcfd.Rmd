@@ -12,13 +12,13 @@ output:
 library(geosciencebc2019008)
 run_date = Sys.Date() %>% str_replace_all(., "-", "_")
 
-model_prefix = 'regr_model_glm_wcfd/glm_wcfd'
+model_prefix = 'regr_model_mars_wcfd/mars_wcfd'
 input_data = "../wcfd_data/final_wcfd_mldf_regr.rds"
-model_type = "regr.glmnet"
+model_type = "regr.mars"
 
 pset= makeParamSet(
-  makeNumericParam('alpha',lower = 0, upper = 1),
-  makeIntegerParam('lambda', lower = -4, upper = 1, trafo = function(x) 10^x)
+  makeDiscreteParam('degree',values=c(1,2,3)),
+  makeIntegerParam('nk', lower = 1, upper = 30)
 )
 
 wa_nums = c(32768, 32950, 33857, 33665, 32582, 33161, 29429, 32301, 33113,
