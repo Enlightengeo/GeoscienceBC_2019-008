@@ -152,9 +152,6 @@ to feature selection. These functions are located in plot_functions.R.
 target_boxplot(ml_df, output_path = '../output/')
 
 # pairs plot of variables with max magnitude target
-
-
-# corrplot of numeric features
 ml_corrplot(ml_df, '../output/', numeric_input_cols, target)
 
 # pca plot

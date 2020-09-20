@@ -1,0 +1,48 @@
+---
+title: "Plot performance"
+author: "Scott McKean"
+date: "8/30/2020"
+output: html_document
+---
+
+Plot performance of models
+
+```{r setup, include=FALSE}
+library(tidyverse)
+```
+
+Classification performance
+
+```{r}
+class_perfclass_perf = read_csv('class_performance.csv')
+
+ggplot(class_perf) +
+  geom_point(aes(x=model, y=train_bias, color='Train Bias', shape='Train Bias', size=2)) +
+  geom_point(aes(x=model, y=test_bias, color='Test Bias', shape='Test Bias', size=2)) +
+  geom_point(aes(x=model, y=train_var, color='Train Variance', shape='Train Variance', size=2)) +
+  geom_point(aes(x=model, y=test_var, color='Test Variance', shape='Test Variance', size=2)) +
+  ylab('Classification Bias/Variance') +
+  xlab('') +
+  scale_color_discrete(name = "") +
+  guides(shape = FALSE, size=FALSE) +
+  theme_minimal() +
+  ggsave('class_performance.jpg', width=8, height=3)
+```
+
+Regression Performance
+
+```{r}
+regr_perf = read_csv('regr_performance.csv')
+
+ggplot(regr_perf) +
+  geom_point(aes(x=model, y=train_bias, color='Train Bias', shape='Train Bias', size=2)) +
+  geom_point(aes(x=model, y=test_bias, color='Test Bias', shape='Test Bias', size=2)) +
+  geom_point(aes(x=model, y=train_var, color='Train Variance', shape='Train Variance', size=2)) +
+  geom_point(aes(x=model, y=test_var, color='Test Variance', shape='Test Variance', size=2)) +
+  ylab('Regression Bias/Variance') +
+  xlab('') +
+  scale_color_discrete(name = "") +
+  guides(shape = FALSE, size=FALSE) +
+  theme_minimal() +
+  ggsave('regr_performance.jpg', width=8, height=3)
+```

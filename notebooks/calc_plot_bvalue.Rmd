@@ -1,0 +1,50 @@
+---
+title: "Seismicity_Catalog"
+author: "Scott McKean"
+date: "February 8, 2018"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(geosciencebc2019008)
+```
+
+## Load seismc catalog
+
+```{r}
+# load catalogue 
+entire_cat <- read_csv('../input/catalogs/20190430_combined_catalogue.csv') %>%
+  sf::st_as_sf(coords = c('X', 'Y'), crs = 26910, remove = FALSE) %>%
+  dplyr::select(-X1)
+
+# npmma catalogue
+npgmma_extents <-
+  sf::st_read('../input/shapefiles/npgmma_extent.shp') %>%
+  st_transform(crs = 26910) 
+
+npgmma_cat = entire_cat %>%
+  dplyr::filter(st_contains(npgmma_extents,entire_cat,sparse=FALSE))
+
+# ksmma catalogue
+ksmma_extents <-
+  sf::st_read('../input/shapefiles/ksmma_extent.shp') %>%
+  st_transform(crs = 26910)  
+
+ksmma_cat = entire_cat %>%
+  dplyr::filter(st_contains(ksmma_extents,entire_cat,sparse=FALSE))
+
+```
+
+```{r}
+p1 = cat_bvalue_plot(entire_cat, 'ALL') +
+  ggsave('../output/b_value_plots/entire_cat.jpeg', width=10, height=5, unit='in')
+
+p2 = cat_bvalue_plot(npgmma_cat, 'NPGMMA') +
+  ggsave('../output/b_value_plots/npgmma.jpeg', width=10, height=5, unit='in')
+
+p3 = cat_bvalue_plot(ksmma_cat, 'KSMMA') +
+  ggsave('../output/b_value_plots/ksmma.jpeg', width=10, height=5, unit='in')
+```

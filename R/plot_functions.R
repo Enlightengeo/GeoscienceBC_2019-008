@@ -324,3 +324,169 @@ make_pdp_plot <- function(i, predictor, feats){
   
   plot(pdp) + theme_minimal() + theme(axis.title.y=element_blank())
 }
+
+#' Evaluate b-value models and make a plot
+#' @param cat earthquake catalogue
+#' @param label string for labelling plot
+#' @return ggplot
+#' @export
+cat_bvalue_plot <- function(cat, label){
+  # Create a sorted column of magnitudes
+  cat$sort <- sort(cat$mw)
+  
+  # Calculate bins & centres using 10% of Freedman - Diaconis Rule
+  num_bins <- k_bins(cat$mw, 'rice')
+  bins <- seq(min(cat$mw),max(cat$mw),length.out = num_bins)
+  bw <- (max(cat$mw)-min(cat$mw))/num_bins
+  centres <- (bins[2:length(bins)]-bins[1:length(bins)-1])/2+bins[1:length(bins)-1]
+  
+  # Calculate number of earthquakes per bin
+  count <- rowSums(table(cut(cat$mw,bins),cat$mw))
+  
+  # Calculate bin ECDF
+  ecdf <- data.frame(centres)
+  ecdf$cdf <- (1-ecdf(cat$mw)(centres))*length(cat$mw)
+  ecdf$log_cdf <- log10(ecdf$cdf)
+  
+  # Maximum curvature Mc, using a smoothing spline and predictor method
+  spl <- smooth.spline(ecdf$centres,count)
+  spl_pred <- predict(spl,deriv=2)
+  Mmaxc <- spl_pred$x[which(abs(spl_pred$y) == max(abs(spl_pred$y)))]
+  filt_maxc <- ecdf[ecdf$centres > Mmaxc,]
+  
+  # 5-fold cross validated linear model fit using caret::train
+  # Fit lm model using 10-fold CV: model
+  maxc_model <- caret::train(
+    log_cdf ~ centres, filt_maxc,
+    method = "lm",
+    trControl = trainControl(
+      method = "cv", number = 5,
+      verboseIter = FALSE
+    )
+  )
+  
+  maxc_result <- data.frame('M'= Mmaxc,
+                            'a'= maxc_model$finalModel$coefficients[1],
+                            'b'= maxc_model$finalModel$coefficients[2],
+                            'r' = unname(maxc_model$results[3]),
+                            'r_sd' = unname(maxc_model$results[5]),
+                            'bw'= bw) %>%
+    dplyr::summarise_all(mean)
+  
+  # Maximum of histogram method, maximum likelihood method
+  Maki <- max(ecdf$centres[count == max(count)])
+  Mbar <- mean(cat$mw[cat$mw > Maki])
+  b_aki <- log10(exp(1)) / (Maki - Mbar)
+  
+  # Use a vector of a values and determine best r^2 value
+  ## Setup Empty Dataframe
+  N = 100
+  aki_df = data.frame('a'=rep(0,N), 'r'=rep(0,N))
+  
+  # Estimate ai values +/- 50 for best fit
+  y1 <- min(ecdf$log_cdf)
+  x1 <- max(ecdf$centres) 
+  # x2 <- Maki
+  y2 <- min(ecdf$log_cdf[count == max(count)])
+  m <- (y2 - y1)/(Maki-x1)
+  a <- -m*x1
+  amin <- a*0.5
+  amax <- a*1.5
+  
+  ## Predict data
+  i <- 0
+  for (ai in linspace(amin,amax,N)) {
+    pred <- ai + b_aki * centres
+    calc_r <- 1-sum(abs(pred - ecdf$log_cdf))/sum(ecdf$log_cdf)
+    aki_df[i, ] <- c(ai, calc_r)
+    i <- i + 1
+  }
+  
+  a_aki <- aki_df[aki_df$r == max(aki_df$r),]$a
+  r_aki <- aki_df[aki_df$r == max(aki_df$r),]$r
+  
+  # lm model fit, with slope set as b_aki and offset
+  
+  # store aki results
+  aki_result <- data.frame('M' = Maki,
+                           'a' = a_aki, 
+                           'b' = b_aki,
+                           'r' = r_aki,
+                           'r_sd' = log(10) * -b_aki / sqrt(length(cat$mw[cat$mw > Maki])),
+                           'bw' = bw) %>%
+    dplyr::summarise_all(mean)
+  
+  ## Machine Learning Goodness of Fit Regression Analysis
+  # Import Magnitude Data
+  mag_all <- cat$mw
+  
+  # Setup Empty Dataframe
+  N = length(bins)
+  df = data.frame('M'=rep(0,N), 'a'=rep(0,N), 'b'=rep(0,N), 'r'=rep(0,N), 'bw'=rep(0,N))
+  Mi <- linspace(quantile(cat$mw)[2],quantile(cat$mw)[4],N)
+  
+  i <- 1
+  for (M in Mi) {
+    # Filter magnitude values
+    filt <- mag_all[mag_all > M]
+    
+    # Calculate bins & centres using Freedman - Diaconis Rule
+    bw <- 2*IQR(filt) / length(filt)^(1/3)
+    bins <- seq(min(filt),max(filt),round(bw,2))
+    centres <- (bins[2:length(bins)]-bins[1:length(bins)-1])/2+bins[1:length(bins)-1]
+    cdf <- data.frame(centres)
+    
+    # Calculate ECDF
+    cdf$cdf <- (1-ecdf(filt)(centres))*length(filt)
+    cdf$log_cdf <- log10(cdf$cdf)
+    
+    # Linear model regression using caret::lm package
+    # Use entire data set since N is low
+    model <- lm(log_cdf ~ centres, cdf)
+    pred <- predict(model, cdf, number = 5)
+    calc_r <- 1-sum(abs(pred - cdf$log_cdf))/sum(cdf$log_cdf)
+    df[i, ] <- c(M, model$coefficients[1], model$coefficients[2], calc_r, bw)
+    i <- i + 1
+  }
+  
+  # Select best fit
+  gof_result <- data.frame(lapply(cbind(df[df$r == max(df$r),],'r_sd' = sd(df$r)), FUN = mean))
+  
+  # Import a discrete colour vector for lines
+  col_vect <- brewer.pal(5,'Set1')
+  aki_text <- paste('Mc (ML): ',sprintf("%.1f", round(aki_result$M,1)),
+                    ' b: ',sprintf("%.2f", round(-aki_result$b,2)),
+                    ' r: ',sprintf("%.2f", round(aki_result$r,2),sep=''))
+  gof_text <- paste('Mc (GOF): ',sprintf("%.1f", round(gof_result$M,1)),
+                    ' b: ',sprintf("%.2f", round(-gof_result$b,2)),
+                    ' r: ',sprintf("%.2f", round(gof_result$r,2),sep=''))
+  maxc_text <- paste('Mc (MC): ',sprintf("%.1f", round(maxc_result$M,1)),
+                     ' b: ',sprintf("%.2f", round(-maxc_result$b,2)),
+                     ' r: ',sprintf("%.2f", round(maxc_result$r,2),sep=''))
+  xrng = range(ecdf$centres)
+  yrng = range(ecdf$cdf)
+  # B-value plot 
+  plt <- ggplot() +
+    geom_histogram(data=cat, aes(x=mw),binwidth = maxc_result$bw) +
+    geom_abline(intercept = aki_result$a, slope = aki_result$b, aes(col = 'Maximum\nLikelihood (ML)\n'), size = 1) +
+    geom_abline(intercept = gof_result$a, slope = gof_result$b, aes(col = 'Goodness\nof Fit (GOF)\n'), size = 1) +
+    geom_abline(intercept = maxc_result$a, slope = maxc_result$b, aes(col = 'Maximum\nCurvature (MC)\n'), size = 1) +
+    scale_y_log10(breaks=c(1,10,100,1000,10000)) +
+    geom_text(aes(x, y, label = aki_text), data = data.frame(x = xrng[2], y = yrng[2]), 
+              hjust = 1, vjust = 0, size = 3.25, col = col_vect[1]) +
+    geom_text(aes(x, y, label = gof_text), data = data.frame(x = xrng[2], y = yrng[2]), 
+              hjust = 1, vjust = 2, size = 3.25, col = col_vect[2]) +
+    geom_text(aes(x, y, label = maxc_text), data = data.frame(x = xrng[2], y = yrng[2]), 
+              hjust = 1, vjust = 4, size = 3.25, col = col_vect[3]) +
+    geom_point(aes(x=centres, y=cdf), data = ecdf) +
+    ylab('Cumulative / Probability Density') +
+    scale_fill_manual(name='My Lines', values=c("black", "blue")) +
+    scale_color_manual('B-Value Models', values = c('Maximum\nLikelihood (ML)\n' = col_vect[1],
+                                                    'Goodness\nof Fit (GOF)\n' = col_vect[2], 
+                                                    'Maximum\nCurvature (MC)\n' = col_vect[3])) +
+    xlab('Moment Magnitude') +
+    ggtitle(label) +
+    theme_minimal()
+  
+  return(plt)
+}
