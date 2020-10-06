@@ -40,11 +40,11 @@ ksmma_cat = entire_cat %>%
 
 ```{r}
 p1 = cat_bvalue_plot(entire_cat, 'ALL') +
-  ggsave('../output/b_value_plots/entire_cat.jpeg', width=10, height=5, unit='in')
+  ggsave('../output/b_value_plots/entire_cat.jpeg', width=8, height=4, unit='in', dpi=600)
 
 p2 = cat_bvalue_plot(npgmma_cat, 'NPGMMA') +
-  ggsave('../output/b_value_plots/npgmma.jpeg', width=10, height=5, unit='in')
+  ggsave('../output/b_value_plots/npgmma.jpeg', width=8, height=4, unit='in', dpi=600)
 
 p3 = cat_bvalue_plot(ksmma_cat, 'KSMMA') +
-  ggsave('../output/b_value_plots/ksmma.jpeg', width=10, height=5, unit='in')
+  ggsave('../output/b_value_plots/ksmma.jpeg', width=8, height=4, unit='in', dpi=600)
 ```

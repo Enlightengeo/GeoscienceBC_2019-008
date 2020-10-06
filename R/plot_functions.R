@@ -468,9 +468,9 @@ cat_bvalue_plot <- function(cat, label){
   # B-value plot 
   plt <- ggplot() +
     geom_histogram(data=cat, aes(x=mw),binwidth = maxc_result$bw) +
-    geom_abline(intercept = aki_result$a, slope = aki_result$b, aes(col = 'Maximum\nLikelihood (ML)\n'), size = 1) +
-    geom_abline(intercept = gof_result$a, slope = gof_result$b, aes(col = 'Goodness\nof Fit (GOF)\n'), size = 1) +
-    geom_abline(intercept = maxc_result$a, slope = maxc_result$b, aes(col = 'Maximum\nCurvature (MC)\n'), size = 1) +
+    geom_abline(intercept = aki_result$a, slope = aki_result$b, col = col_vect[1], size = 1) +
+    geom_abline(intercept = gof_result$a, slope = gof_result$b, col = col_vect[2], size = 1) +
+    geom_abline(intercept = maxc_result$a, slope = maxc_result$b, col = col_vect[3], size = 1) +
     scale_y_log10(breaks=c(1,10,100,1000,10000)) +
     geom_text(aes(x, y, label = aki_text), data = data.frame(x = xrng[2], y = yrng[2]), 
               hjust = 1, vjust = 0, size = 3.25, col = col_vect[1]) +
@@ -480,10 +480,6 @@ cat_bvalue_plot <- function(cat, label){
               hjust = 1, vjust = 4, size = 3.25, col = col_vect[3]) +
     geom_point(aes(x=centres, y=cdf), data = ecdf) +
     ylab('Cumulative / Probability Density') +
-    scale_fill_manual(name='My Lines', values=c("black", "blue")) +
-    scale_color_manual('B-Value Models', values = c('Maximum\nLikelihood (ML)\n' = col_vect[1],
-                                                    'Goodness\nof Fit (GOF)\n' = col_vect[2], 
-                                                    'Maximum\nCurvature (MC)\n' = col_vect[3])) +
     xlab('Moment Magnitude') +
     ggtitle(label) +
     theme_minimal()
