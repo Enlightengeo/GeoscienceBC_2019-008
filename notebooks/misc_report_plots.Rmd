@@ -1,0 +1,29 @@
+---
+title: "Misc Report Plots"
+author: "Scott McKean"
+date: "October 6, 2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(geosciencebc2019008)
+```
+
+## HDBSCAN Plot
+
+```{r}
+hdbscan = read_csv('../output/hdbscan_sensitivity_grid.csv')
+
+seis_events = pivot_longer(hdbscan,-c(seismogenic_events,mean_seismogenic_mag))
+
+ggplot(seis_events) +
+  geom_point(aes(x=value, y=seismogenic_events, colour=mean_seismogenic_mag)) +
+  scale_color_viridis_c(option='B', name='Mean Magnitude') +
+  facet_wrap(. ~ name, scales = "free_x") +
+  ylab('Seismogenic Events') +
+  xlab('Value') +
+  ggsave('../output/hdbscan_sensitivity_plot.jpeg', width=10, height=5, dpi=600)
+```
