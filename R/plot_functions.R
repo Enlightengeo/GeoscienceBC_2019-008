@@ -46,8 +46,8 @@ pca_unit_circle_plot <- function(ml_df, output_path){
     coord_fixed() +
     ggtitle("PCA Correlation Circle") +
     theme_minimal() +
-    ggsave(paste(output_path,"pca_circle.jpeg",sep=""), width = 36, height = 24, units = 'cm') + 
-    ggsave(paste(output_path,"pca_circle.eps",sep=""), width = 36, height = 24, units = 'cm')
+    ggsave(paste(output_path,"pca_circle.jpeg",sep=""), width = 36, height = 24, units = 'cm', dpi=600) + 
+    ggsave(paste(output_path,"pca_circle.eps",sep=""), width = 36, height = 24, units = 'cm', dpi=600)
 }
 
 #' Calculate and Plot a PCA scree plot
@@ -72,8 +72,8 @@ pca_scree_plot <- function(ml_df, output_path){
     ggtitle("Principal Component Analysis Scree Plot") +
     scale_x_continuous(name = 'Principal Component', breaks = seq(0,max(pca_df$pca))) +
     theme_minimal() + 
-    ggsave(paste(output_path,"pca_scree_plot.jpeg",sep=""), width = 12, height = 8, units = 'in') +
-    ggsave(paste(output_path,"pca_scree_plot.eps",sep=""), width = 12, height = 8, units = 'in')
+    ggsave(paste(output_path,"pca_scree_plot.jpeg",sep=""), width = 12, height = 8, units = 'in', dpi=600) +
+    ggsave(paste(output_path,"pca_scree_plot.eps",sep=""), width = 12, height = 8, units = 'in', dpi=600)
 }
 
 #' Make a correlation plot
@@ -114,8 +114,8 @@ target_boxplot <- function(ml_df, output_path = '../output/',
           axis.text.y=element_blank(), axis.ticks.y=element_blank()) +
     xlab("") +
     ylab("") + 
-    ggsave(paste0(output_path,prefix,"boxplot.jpeg"), width = 24, height = 48, units = 'in') + 
-    ggsave(paste0(output_path,prefix,"boxplot.eps"), width = 24, height = 48)
+    ggsave(paste0(output_path,prefix,"boxplot.jpeg"), width = 24, height = 48, units = 'in', dpi=600) + 
+    ggsave(paste0(output_path,prefix,"boxplot.eps"), width = 24, height = 48, dpi=600)
 }
 
 #' Make a target scatter plot
@@ -130,8 +130,8 @@ target_scatter_plot <- function(ml_df, output_path = '../output/'){
   ggplot(ml_df_melt, aes(x = max_mag, y = value)) +
     geom_point() +
     facet_wrap(. ~ variable, scales = "free_y", ncol = 6) +
-    ggsave(paste0(output_path,"scatter_plot.jpeg"), width = 24, height = 48, units = 'in') +
-    ggsave(paste0(output_path,"scatter_plot.eps"), width = 24, height = 48, units = 'in')
+    ggsave(paste0(output_path,"scatter_plot.jpeg"), width = 24, height = 48, units = 'in', dpi=600) +
+    ggsave(paste0(output_path,"scatter_plot.eps"), width = 24, height = 48, units = 'in', dpi=600)
 }
 
 #' Make a target scatter plot
@@ -150,8 +150,8 @@ plot_classif_filt_importance <- function(classif_tsk, output_path = '../output/'
   plot +
     ggtitle('Filter Based Feature Importance - Classification') +
     theme(plot.margin=unit(c(1,1,1.5,1.5),"in")) +
-    ggsave(paste0(output_path,"classif_filter_feat_import.jpeg"), width = 11, height = 8, units = 'in') + 
-    ggsave(paste0(output_path,"classif_filter_feat_import.eps"), width = 11, height = 8, units = 'in')
+    ggsave(paste0(output_path,"classif_filter_feat_import.jpeg"), width = 11, height = 8, units = 'in', dpi=600) + 
+    ggsave(paste0(output_path,"classif_filter_feat_import.eps"), width = 11, height = 8, units = 'in', dpi=600)
 }
 
 
@@ -171,8 +171,8 @@ plot_regr_filt_importance <- function(regr_tsk, output_path = '../output/'){
   plot +
     ggtitle('Filter Based Feature Importance - Regression') +
     theme(plot.margin=unit(c(1,1,1.5,1.5),"in")) +
-    ggsave(paste0(output_path,"regr_filter_feat_import.jpeg"), width = 11, height = 8, units = 'in') + 
-    ggsave(paste0(output_path,"regr_filter_feat_import.eps"), width = 11, height = 8, units = 'in')
+    ggsave(paste0(output_path,"regr_filter_feat_import.jpeg"), width = 11, height = 8, units = 'in', dpi=600) + 
+    ggsave(paste0(output_path,"regr_filter_feat_import.eps"), width = 11, height = 8, units = 'in', dpi=600)
 }
 
 #' Plot wrapper feature selection results
@@ -199,8 +199,8 @@ plot_classif_feat_seq <- function(path,
     ylab(paste('Proportion in top',n_best_val,'best runs')) +
     theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
     theme(plot.margin=unit(c(1,1,1.5,1.5),"in")) +
-    ggsave(paste0(output_path,"classif_sfbs_feat_import.jpeg"), width = 11, height = 8, units = 'in') + 
-    ggsave(paste0(output_path,"classif_sfbs_feat_import.eps"), width = 11, height = 8, units = 'in')
+    ggsave(paste0(output_path,"classif_sfbs_feat_import.jpeg"), width = 11, height = 8, units = 'in', dpi=600) + 
+    ggsave(paste0(output_path,"classif_sfbs_feat_import.eps"), width = 11, height = 8, units = 'in', dpi=600)
 }
 
 #' Plot wrapper feature selection results
@@ -229,8 +229,8 @@ plot_classif_feat_rand <- function(path,
     ylab(paste('Proportion in top',n_best_val,'best runs')) +
     theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
     theme(plot.margin=unit(c(1,1,1.5,1.5),"in")) +
-    ggsave(paste0(output_path,"classif_rand_feat_import.jpeg"), width = 11, height = 8, units = 'in') + 
-    ggsave(paste0(output_path,"classif_rand_feat_import.eps"), width = 11, height = 8, units = 'in')
+    ggsave(paste0(output_path,"classif_rand_feat_import.jpeg"), width = 11, height = 8, units = 'in', dpi=600) + 
+    ggsave(paste0(output_path,"classif_rand_feat_import.eps"), width = 11, height = 8, units = 'in', dpi=600)
 }
 
 #' Plot wrapper feature selection results
@@ -258,8 +258,8 @@ plot_regr_feat_seq <- function(path,
     ylab(paste('Proportion in',n_best_val,'runs')) +
     theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
     theme(plot.margin=unit(c(1,1,1.5,1.5),"in")) +
-    ggsave(paste0(output_path,"regr_sfbs_feat_import.jpeg"), width = 11, height = 8, units = 'in') + 
-    ggsave(paste0(output_path,"regr_sfbs_rand_feat_import.eps"), width = 11, height = 8, units = 'in')
+    ggsave(paste0(output_path,"regr_sfbs_feat_import.jpeg"), width = 11, height = 8, units = 'in', dpi=600) + 
+    ggsave(paste0(output_path,"regr_sfbs_rand_feat_import.eps"), width = 11, height = 8, units = 'in', dpi=600)
 }
 
 #' Plot wrapper feature selection results
@@ -287,8 +287,8 @@ plot_regr_feat_rand <- function(path,
     ylab(paste('Proportion in top',n_best_val,'best runs')) +
     theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
     theme(plot.margin=unit(c(1,1,1.5,1.5),"in")) +
-    ggsave(paste0(output_path,"regr_rand_feat_import.jpeg"), width = 11, height = 8, units = 'in') + 
-    ggsave(paste0(output_path,"regr_rand_rand_feat_import.eps"), width = 11, height = 8, units = 'in')
+    ggsave(paste0(output_path,"regr_rand_feat_import.jpeg"), width = 11, height = 8, units = 'in', dpi=600) + 
+    ggsave(paste0(output_path,"regr_rand_rand_feat_import.eps"), width = 11, height = 8, units = 'in', dpi=600)
 }
 
 
@@ -309,7 +309,7 @@ plot_feat_imp <- function(importance,
     coord_flip() +
     ylab("Feature Importance") +
     xlab("") +
-    ggsave(paste0(output_path,label,"_trained_feat_import.jpeg"), width = 8, height = 12, units = 'in')
+    ggsave(paste0(output_path,label,"_trained_feat_import.jpeg"), width = 8, height = 12, units = 'in', dpi=600)
 }
 
 #' Make a single PDP plot for mapping

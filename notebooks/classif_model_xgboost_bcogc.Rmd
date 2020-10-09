@@ -27,7 +27,8 @@ pset= makeParamSet(
 )
 
 wa_nums = c(32768, 32950, 33857, 33665, 32582, 33161, 29429, 32301, 33113,
-            24035, 33894, 33162, 32574, 32575, 33550,	37346)
+            24035, 33894, 33162, 32574, 32575, 33550,	37346, 30376, 30940, 
+            28640, 29976, 30735)
 
 shap_wells = which(read_rds(input_data) %>% pull(wa_num) %in% wa_nums)
 
@@ -140,7 +141,7 @@ p2 = ggplot(as.data.frame(interact$results) %>% filter(.class == 'X1')) +
 
 ggsave(file = paste0('../output/',model_prefix,"_impintplot.jpg"), 
        arrangeGrob(grobs = list(p1,p2), nrow=1),
-       width = 12, height = 8)
+       width = 12, height = 8, dpi=600)
 
 ## Confusion Matrix and Threshold
 p1 = plotLearnerPrediction(
@@ -169,7 +170,7 @@ p4 = plotLearnerPrediction(
 
 ggsave(file = paste0('../output/',model_prefix,"_learnpreds.jpg"), 
        arrangeGrob(grobs = list(p1,p2,p3,p4), nrow=2),
-       width = 12, height = 8)
+       width = 12, height = 8, dpi=600)
 
 ## Partial Dependence & ICE Plots
 
@@ -185,7 +186,7 @@ plist <- map(.x = 1:length(final_feats), .f = make_pdp_plot,
 
 ggsave(file = paste0('../output/',model_prefix,"_pdpplot.jpg"), 
        arrangeGrob(grobs = plist, ncol = 3, left = 'Seismogenic'),
-       width = 12, height = 8)
+       width = 12, height = 8, dpi=600)
 
 ## LIME & SHAP
 
@@ -213,6 +214,6 @@ for (well in shap_wells){
   
   ggsave(file = paste0('../output/',model_prefix,"_",well,"_limeshap.jpg"),
          arrangeGrob(grobs = list(p1,p2), nrow=1),
-         width = 12, height = 4)
+         width = 12, height = 4, dpi=600)
 }
 ```
