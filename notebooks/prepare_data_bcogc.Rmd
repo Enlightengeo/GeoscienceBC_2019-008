@@ -86,13 +86,13 @@ montney_extents <-
 ksmma_extents <- 
   sf::read_sf(
     dsn = "../input/shapefiles", 
-    layer = "Kiskatinaw Seismic Monitoring and Mitigation Area_plyln") %>%
+    layer = "ksmma_extent") %>%
   sf::st_transform(26910)
 
 npgmma_extents <- 
   sf::read_sf(
     dsn = "../input/shapefiles", 
-    layer = "Updated North Peace Ground Motion Monitoring Area_plyln") %>%
+    layer = "npgmma_extent") %>%
   sf::st_transform(26910)
 ```
 
@@ -138,7 +138,7 @@ horizontal wells, so this is considered a MVP for a spacing feature.
 Optimized with RANN, a kd-tree algorithm (requires projected coordinates).
 
 ```{R}
-all_wells_sf <- rbind(horiz_dev_well_sf, vert_well_sf) %>%
+all_wells_sf <- dplyr::bind_rows(horiz_dev_well_sf, vert_well_sf) %>%
   filter_extents_add_on_prod_comp(., montney_extents, well_prod_df, well_comp_df) %>%
   add_horizontal_well_spacing(.)
 ```
@@ -182,7 +182,12 @@ raster_stack <- '../geology_maps/' %>%
 well_geology_df <- raster::extract(raster_stack, well_buffers,
                 na.rm = TRUE, weights=TRUE, fun = mean, method = 'simple')
 
-write.csv(well_geology_df, paste0('../output/','bcogc_well_geology_df.csv'))
+data.frame(well_geology_df) %>%
+  mutate_all(., function(x) as.numeric(x)) %>%
+  cbind(
+    all_wells_sf %>% as.data.frame() %>% select(unique_surv_id, wa_num),.
+    ) %>%
+  write_csv(., paste0('../output/','bcogc_well_geology_df.csv'))
 ```
 
 Instead of doing the above intersection with the original geology maps,
